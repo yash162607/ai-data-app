@@ -33,6 +33,10 @@ export default function DashboardPage() {
     reader.onload = function(e) {
       var text = e.target.result
       
+      // Fix encoding - remove BOM and clean text
+      text = text.replace(/^\uFEFF/, '') // Remove BOM
+      text = text.replace(/\r/g, '') // Remove carriage returns
+      
       // Detect currency
       var currencySymbol = '$'
       if (text.includes('₹') || text.includes('INR')) {
@@ -47,49 +51,32 @@ export default function DashboardPage() {
       var items = []
       
       for (var i = 1; i < lines.length; i++) {
-        var parts = lines[i].split(',')
+        var line = lines[i].trim()
+        if (!line) continue
         
-        // Try to find amount - look for $ or number in any column
+        var parts = line.split(',')
+        
+        if (parts.length < 2) continue
+        
         var amount = 0
         var name = 'Item'
         var category = 'General'
         
-        if (parts.length >= 2) {
-          // Find amount in any column (look for numbers or $)
-          for (var j = 0; j < parts.length; j++) {
-            var val = parts[j].trim()
-            // Check if contains number or currency symbol
-            if (val.match(/[\$₹€£]?\d+/)) {
-              // Extract number
-              var num = val.replace(/[^0-9.]/g, '')
-              if (num && parseFloat(num) > 0) {
-                amount = parseFloat(num)
-                // Use column before for name (usually)
-                if (j > 0) {
-                  name = parts[j - 1].trim()
-                }
-                break
-              }
+        // Try to find amount in any column
+        for (var j = 0; j < parts.length; j++) {
+          var val = parts[j].trim()
+          // Look for amount with or without currency symbol
+          var match = val.match(/[\$₹€£]?\s*(\d+(?:,\d{3})*(?:\.\d{2})?)/)
+          if (match) {
+            var numStr = match[1].replace(/,/g, '')
+            amount = parseFloat(numStr)
+            if (amount > 0) {
+              // Name is usually in first column
+              if (parts[0]) name = parts[0].trim()
+              // Category can be from product column
+              if (parts.length > 2 && parts[2]) category = parts[2].trim()
+              break
             }
-          }
-          
-          // If no amount found, try last column as fallback
-          if (amount === 0) {
-            var lastCol = parts[parts.length - 1].trim()
-            var num = lastCol.replace(/[^0-9.]/g, '')
-            if (num && parseFloat(num) > 0) {
-              amount = parseFloat(num)
-            }
-          }
-          
-          // Get name from first column if not set
-          if (parts[0]) {
-            name = parts[0].trim()
-          }
-          
-          // Get category from middle columns (like product column)
-          if (parts.length >= 6) {
-            category = parts[parts.length - 2].trim() || 'General'
           }
         }
         
@@ -105,7 +92,7 @@ export default function DashboardPage() {
       }
       
       if (items.length === 0) {
-        alert('No valid data found! Make sure your CSV has numbers for amounts.')
+        alert('No valid amounts found! Please check your CSV format.')
         setIsProcessing(false)
         return
       }
@@ -141,7 +128,7 @@ export default function DashboardPage() {
       setShowResults(true)
     }
     
-    reader.readAsText(file)
+    reader.readAsText(file, 'UTF-8')
   }
 
   function handleGoHome() {
