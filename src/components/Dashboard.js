@@ -1,264 +1,216 @@
-import { DollarSign, PieChart, BarChart3, Lightbulb, Clock, Tag, Target, Zap, CheckCircle, XCircle } from 'lucide-react'
-import { Doughnut, Line } from 'react-chartjs-2'
-import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, PointElement, LineElement } from 'chart.js'
+'use client'
 
-ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, PointElement, LineElement)
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { useAuth } from '../../context/auth'
+import Navbar from '../../components/Navbar'
+import UploadSection from '../../components/UploadSection'
+import DashboardView from '../../components/Dashboard'
+import Footer from '../../components/Footer'
 
-export default function Dashboard({ data }) {
-  const currency = data.currency || '$'
-  const categories = [...new Set(data.items.map(item => item.category))]
-  const categoryTotals = categories.map(cat => 
-    data.items.filter(item => item.category === cat).reduce((sum, item) => sum + item.amount, 0)
-  )
+export default function DashboardPage() {
+  const router = useRouter()
+  const { user, logout, saveProject, getUserProjects } = useAuth()
+  
+  const [isProcessing, setIsProcessing] = useState(false)
+  const [showResults, setShowResults] = useState(false)
+  const [currentData, setCurrentData] = useState(null)
+  const [projects, setProjects] = useState([])
 
-  const categoryData = {
-    labels: categories,
-    datasets: [{
-      data: categoryTotals,
-      backgroundColor: ['#6366F1', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'],
-      borderWidth: 0,
-    }]
+  useEffect(function() {
+    if (!user) {
+      router.push('/auth')
+    } else {
+      setProjects(getUserProjects())
+    }
+  }, [user])
+
+  function handleProcessData(file, projectName) {
+    setIsProcessing(true)
+    
+    var reader = new FileReader()
+    
+    reader.onload = function(e) {
+      try {
+        var text = e.target.result
+        
+        // Debug: log first 500 chars
+        console.log('Raw text:', text.substring(0, 500))
+        
+        if (!text) {
+          alert('File is empty!')
+          setIsProcessing(false)
+          return
+        }
+        
+        // Simple clean - just remove BOM and normalize lines
+        text = text.replace(/^\uFEFF/, '')
+        text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+        
+        // Detect currency
+        var currency = '$'
+        if (text.includes('₹') || text.includes('INR')) currency = '₹'
+        else if (text.includes('€')) currency = '€'
+        else if (text.includes('£')) currency = '£'
+        
+        // Split by new lines
+        var lines = text.split('\n').filter(function(l) { return l.trim() })
+        
+        console.log('Lines found:', lines.length)
+        console.log('First 3 lines:', lines.slice(0, 3))
+        
+        var items = []
+        
+        // Find header line index
+        var headerIndex = 0
+        for (var h = 0; h < Math.min(5, lines.length); h++) {
+          if (lines[h].toLowerCase().includes('amount') || lines[h].toLowerCase().includes('total') || lines[h].toLowerCase().includes('price') || lines[h].toLowerCase().includes('cost')) {
+            headerIndex = h
+            break
+          }
+        }
+        
+        // Process each line from header
+        for (var i = headerIndex + 1; i < lines.length; i++) {
+          var line = lines[i].trim()
+          if (!line || line.length < 2) continue
+          
+          // Split by any delimiter
+          var parts = line.split(/[\t,;|]+/).filter(function(p) { return p.trim() })
+          
+          console.log('Line', i, ':', parts)
+          
+          if (parts.length < 2) continue
+          
+          // Find amount - look for number in any column
+          var amount = 0
+          var name = 'Item'
+          var category = 'General'
+          
+          for (var j = 0; j < parts.length; j++) {
+            var val = parts[j].trim()
+            
+            // Skip if it's a date
+            if (val.match(/\d{4}[-\/]\d{2}[-\/]\d{2}/)) continue
+            
+            // Get number
+            var num = val.replace(/[^0-9.]/g, '')
+            if (num && num.length > 0 && num !== '.') {
+              var parsed = parseFloat(num)
+              if (parsed > 0 && parsed < 10000000) {  // Reasonable amount
+                amount = parsed
+                // Use first column as name
+                if (j === 0 && parts[0]) name = parts[0].trim()
+                // Use second column as category if it's text
+                if (j === 1 && parts[1]) category = parts[1].trim()
+              }
+            }
+          }
+          
+          if (amount > 0) {
+            items.push({
+              id: items.length + 1,
+              name: name,
+              amount: amount,
+              category: category,
+              date: new Date().toISOString().split('T')[0]
+            })
+          }
+        }
+        
+        console.log('Items found:', items.length)
+        
+        if (items.length === 0) {
+          alert('No valid data! Make sure your file has numbers for amounts. Try checking Browser Console (F12) for debug info.')
+          setIsProcessing(false)
+          return
+        }
+        
+        // Calculate insights
+        var total = items.reduce(function(sum, item) { return sum + item.amount }, 0)
+        var categories = [...new Set(items.map(function(item) { return item.category }))]
+        var categoryTotals = categories.map(function(cat) { 
+          return items.filter(function(item) { return item.category === cat })
+            .reduce(function(sum, item) { return sum + item.amount }, 0)
+        })
+        var topCategoryIndex = categoryTotals.indexOf(Math.max.apply(null, categoryTotals))
+        var topCategory = categories[topCategoryIndex] || 'General'
+        var avgPerItem = items.length > 0 ? total / items.length : 0
+        
+        var projectData = {
+          name: projectName,
+          items: items,
+          insights: {
+            total: total,
+            topCategory: topCategory,
+            avgPerItem: avgPerItem,
+            highestExpense: items.length > 0 ? Math.max.apply(null, items.map(function(i) { return i.amount })) : 0,
+            recommendation: 'Your biggest expense is ' + topCategory
+          },
+          currency: currency
+        }
+        
+        saveProject(projectData)
+        setCurrentData(projectData)
+        setProjects(getUserProjects())
+        setIsProcessing(false)
+        setShowResults(true)
+        
+      } catch (err) {
+        alert('Error: ' + err.message)
+        setIsProcessing(false)
+      }
+    }
+    
+    reader.onerror = function() {
+      alert('Cannot read file!')
+      setIsProcessing(false)
+    }
+    
+    reader.readAsText(file, 'UTF-8')
   }
 
-  const expensesData = {
-    labels: data.items.map(item => item.date),
-    datasets: [{
-      label: 'Spending',
-      data: data.items.map(item => item.amount),
-      borderColor: '#6366F1',
-      backgroundColor: 'rgba(99, 102, 241, 0.1)',
-      fill: true,
-      tension: 0.4,
-    }]
+  function handleGoHome() {
+    router.push('/')
   }
 
-  const highestItem = data.items.reduce((max, item) => item.amount > max.amount ? item : max, data.items[0])
+  function handleNewAnalysis() {
+    setShowResults(false)
+    setCurrentData(null)
+  }
+
+  if (!user) return null
 
   return (
-    <section className="py-12 px-4 bg-gray-50">
-      <div className="max-w-6xl mx-auto space-y-10">
-        
-        {/* QUICK OVERVIEW */}
-        <div className="bg-white rounded-3xl p-8 shadow-lg">
-          <div className="text-center mb-8">
-            <h2 className="text-3xl font-bold text-gray-800">Quick Overview</h2>
-            <p className="text-gray-500">Your business at a glance</p>
-          </div>
-
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-green-500 rounded-2xl p-6 text-white text-center">
-              <DollarSign className="w-8 h-8 mx-auto mb-2" />
-              <p className="text-3xl font-bold">{currency}{data.insights.total.toLocaleString()}</p>
-              <p className="text-sm opacity-80">Total Spent</p>
-            </div>
-            
-            <div className="bg-indigo-500 rounded-2xl p-6 text-white text-center">
-              <Tag className="w-8 h-8 mx-auto mb-2" />
-              <p className="text-3xl font-bold">{data.insights.topCategory}</p>
-              <p className="text-sm opacity-80">Biggest Expense</p>
-            </div>
-            
-            <div className="bg-amber-500 rounded-2xl p-6 text-white text-center">
-              <BarChart3 className="w-8 h-8 mx-auto mb-2" />
-              <p className="text-3xl font-bold">{currency}{data.insights.avgPerItem.toFixed(0)}</p>
-              <p className="text-sm opacity-80">Average Cost</p>
-            </div>
-            
-            <div className="bg-rose-500 rounded-2xl p-6 text-white text-center">
-              <Clock className="w-8 h-8 mx-auto mb-2" />
-              <p className="text-3xl font-bold">{data.items.length}</p>
-              <p className="text-sm opacity-80">Transactions</p>
-            </div>
+    <main className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
+      <Navbar />
+      <div className="bg-white shadow-sm py-3">
+        <div className="max-w-7xl mx-auto px-4 flex justify-between items-center">
+          <span className="font-medium">Welcome, {user.name}</span>
+          <div className="flex gap-4">
+            <button onClick={handleGoHome} className="text-blue-500 text-sm">Home</button>
+            <button onClick={logout} className="text-gray-600 text-sm">Logout</button>
           </div>
         </div>
-
-        {/* CHARTS */}
-        <div className="bg-white rounded-3xl p-8 shadow-lg">
-          <div className="text-center mb-8">
-            <h2 className="text-3xl font-bold text-gray-800">Visual Charts</h2>
-            <p className="text-gray-500">See your spending patterns</p>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <div>
-              <h3 className="font-bold text-lg mb-4">Spending by Category</h3>
-              <div className="h-64 flex justify-center">
-                <Doughnut data={categoryData} options={{ plugins: { legend: { position: 'bottom' } } }} />
-              </div>
-            </div>
-            
-            <div>
-              <h3 className="font-bold text-lg mb-4">Spending Over Time</h3>
-              <div className="h-64">
-                <Line data={expensesData} options={{ plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }} />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* ADVICE */}
-        <div className="bg-white rounded-3xl p-8 shadow-lg">
-          <div className="text-center mb-8">
-            <h2 className="text-3xl font-bold text-gray-800">Advice For You</h2>
-            <p className="text-gray-500">What you should and should not do</p>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <div className="bg-green-50 rounded-2xl p-6">
-              <div className="flex items-center mb-4">
-                <CheckCircle className="w-8 h-8 text-green-500 mr-2" />
-                <h3 className="text-xl font-bold text-green-700">What To DO</h3>
-              </div>
-              <ul className="space-y-4">
-                <li className="flex items-start">
-                  <CheckCircle className="w-5 h-5 text-green-500 mr-3 mt-1" />
-                  <div>
-                    <p className="font-semibold">Set a monthly budget of {currency}{(data.insights.total / 12).toFixed(0)}</p>
-                    <p className="text-sm text-gray-600">Limit spending each month</p>
-                  </div>
-                </li>
-                <li className="flex items-start">
-                  <CheckCircle className="w-5 h-5 text-green-500 mr-3 mt-1" />
-                  <div>
-                    <p className="font-semibold">Track expenses weekly</p>
-                    <p className="text-sm text-gray-600">Check spending every week</p>
-                  </div>
-                </li>
-                <li className="flex items-start">
-                  <CheckCircle className="w-5 h-5 text-green-500 mr-3 mt-1" />
-                  <div>
-                    <p className="font-semibold">Get multiple quotes</p>
-                    <p className="text-sm text-gray-600">Compare at least 3 vendors</p>
-                  </div>
-                </li>
-              </ul>
-            </div>
-
-            <div className="bg-red-50 rounded-2xl p-6">
-              <div className="flex items-center mb-4">
-                <XCircle className="w-8 h-8 text-red-500 mr-2" />
-                <h3 className="text-xl font-bold text-red-700">What NOT To DO</h3>
-              </div>
-              <ul className="space-y-4">
-                <li className="flex items-start">
-                  <XCircle className="w-5 h-5 text-red-500 mr-3 mt-1" />
-                  <div>
-                    <p className="font-semibold">Don't overspend on {data.insights.topCategory}</p>
-                    <p className="text-sm text-gray-600">This is {((categoryTotals[0] / data.insights.total) * 100).toFixed(0)}% of total</p>
-                  </div>
-                </li>
-                <li className="flex items-start">
-                  <XCircle className="w-5 h-5 text-red-500 mr-3 mt-1" />
-                  <div>
-                    <p className="font-semibold">Don't make impulsive purchases</p>
-                    <p className="text-sm text-gray-600">Wait 24-48 hours before buying</p>
-                  </div>
-                </li>
-                <li className="flex items-start">
-                  <XCircle className="w-5 h-5 text-red-500 mr-3 mt-1" />
-                  <div>
-                    <p className="font-semibold">Don't skip vendor comparison</p>
-                    <p className="text-sm text-gray-600">Always check multiple vendors</p>
-                  </div>
-                </li>
-              </ul>
-            </div>
-          </div>
-        </div>
-
-        {/* ACTION PLAN */}
-        <div className="bg-white rounded-3xl p-8 shadow-lg">
-          <div className="text-center mb-8">
-            <h2 className="text-3xl font-bold text-gray-800">Action Plan</h2>
-            <p className="text-gray-500">Steps to improve your business</p>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="bg-blue-50 rounded-2xl p-6">
-              <Clock className="w-8 h-8 text-blue-500 mb-4" />
-              <h3 className="font-bold text-xl mb-4">This Week</h3>
-              <ol className="space-y-2">
-                <li>1. Review all expenses</li>
-                <li>2. List recurring costs</li>
-                <li>3. Find duplicates</li>
-              </ol>
-            </div>
-
-            <div className="bg-green-50 rounded-2xl p-6">
-              <Target className="w-8 h-8 text-green-500 mb-4" />
-              <h3 className="font-bold text-xl mb-4">This Month</h3>
-              <ol className="space-y-2">
-                <li>1. Set budget limit</li>
-                <li>2. Compare vendors</li>
-                <li>3. Cut 10% costs</li>
-              </ol>
-            </div>
-
-            <div className="bg-purple-50 rounded-2xl p-6">
-              <Zap className="w-8 h-8 text-purple-500 mb-4" />
-              <h3 className="font-bold text-xl mb-4">This Quarter</h3>
-              <ol className="space-y-2">
-                <li>1. Negotiate contracts</li>
-                <li>2. Switch vendors</li>
-                <li>3. Automate tracking</li>
-              </ol>
-            </div>
-          </div>
-        </div>
-
-        {/* ALL DATA */}
-        <div className="bg-white rounded-3xl p-8 shadow-lg">
-          <div className="text-center mb-8">
-            <h2 className="text-3xl font-bold text-gray-800">All Transactions</h2>
-            <p className="text-gray-500">Complete breakdown</p>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-800 text-white">
-                <tr>
-                  <th className="text-left p-3">No.</th>
-                  <th className="text-left p-3">Description</th>
-                  <th className="text-left p-3">Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.items.map((item, index) => (
-                  <tr key={item.id} className="border-b">
-                    <td className="p-3">{index + 1}</td>
-                    <td className="p-3">{item.name}</td>
-                    <td className="p-3 font-bold">{currency}{item.amount.toFixed(2)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* SUMMARY */}
-        <div className="bg-gradient-to-r from-gray-800 to-gray-900 text-white rounded-3xl p-8 shadow-lg">
-          <div className="text-center mb-8">
-            <h2 className="text-3xl font-bold">Summary</h2>
-            <p className="text-gray-300">Overall review</p>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 text-center">
-            <div>
-              <p className="text-gray-300">Total Spending</p>
-              <p className="text-4xl font-bold text-yellow-400">{currency}{data.insights.total.toLocaleString()}</p>
-            </div>
-            <div>
-              <p className="text-gray-300">Biggest Expense</p>
-              <p className="text-4xl font-bold text-yellow-400">{currency}{highestItem.amount}</p>
-            </div>
-            <div>
-              <p className="text-gray-300">Save 10%</p>
-              <p className="text-4xl font-bold text-green-400">{currency}{(data.insights.total * 0.1).toFixed(0)}</p>
-            </div>
-          </div>
-        </div>
-
       </div>
-    </section>
+      
+      {!showResults ? (
+        <div>
+          <UploadSection onProcessData={handleProcessData} isProcessing={isProcessing} />
+          <div className="text-center py-8">
+            <button onClick={handleGoHome} className="bg-gray-200 px-6 py-3 rounded-lg">Back to Home</button>
+          </div>
+        </div>
+      ) : (
+        <div>
+          <div className="max-w-6xl mx-auto px-4 pt-8 flex gap-4">
+            <button onClick={handleGoHome} className="bg-gray-800 text-white px-6 py-3 rounded-lg">Back</button>
+            <button onClick={handleNewAnalysis} className="bg-blue-500 text-white px-6 py-3 rounded-lg">New Upload</button>
+          </div>
+          <DashboardView data={currentData} />
+        </div>
+      )}
+      <Footer />
+    </main>
   )
 }
