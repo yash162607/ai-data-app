@@ -1,4 +1,4 @@
-import { Upload, Loader2, FileText, ExternalLink, Edit3 } from 'lucide-react'
+import { Upload, Loader2, FileText, ExternalLink } from 'lucide-react'
 import { useState, useRef } from 'react'
 
 export default function UploadSection({ onProcessData, isProcessing }) {
@@ -59,7 +59,7 @@ export default function UploadSection({ onProcessData, isProcessing }) {
             <div className="flex flex-col items-center">
               <Upload className="w-12 h-12 mx-auto mb-4 text-gray-400" />
               <h3 className="text-xl font-bold mb-2">Upload Your File</h3>
-              <p className="text-gray-600 mb-4">CSV file with data</p>
+              <p className="text-gray-600 mb-4">CSV or Text file with data</p>
               <button 
                 onClick={chooseFile}
                 className="bg-blue-500 text-white px-8 py-3 rounded-lg font-semibold"
@@ -71,7 +71,7 @@ export default function UploadSection({ onProcessData, isProcessing }) {
                 type="file"
                 className="hidden"
                 onChange={handleFileChange}
-                accept=".csv"
+                accept=".csv,.txt"
               />
             </div>
           )}

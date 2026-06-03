@@ -31,104 +31,155 @@ export default function DashboardPage() {
     var reader = new FileReader()
     
     reader.onload = function(e) {
-      var text = e.target.result
-      
-      // Fix encoding - remove BOM and clean text
-      text = text.replace(/^\uFEFF/, '') // Remove BOM
-      text = text.replace(/\r/g, '') // Remove carriage returns
-      
-      // Detect currency
-      var currencySymbol = '$'
-      if (text.includes('₹') || text.includes('INR')) {
-        currencySymbol = '₹'
-      } else if (text.includes('€')) {
-        currencySymbol = '€'
-      } else if (text.includes('£')) {
-        currencySymbol = '£'
-      }
-      
-      var lines = text.split('\n').filter(function(line) { return line.trim() })
-      var items = []
-      
-      for (var i = 1; i < lines.length; i++) {
-        var line = lines[i].trim()
-        if (!line) continue
+      try {
+        // Get text and clean it properly
+        var text = e.target.result
         
-        var parts = line.split(',')
+        if (!text || text.length === 0) {
+          alert('File is empty!')
+          setIsProcessing(false)
+          return
+        }
         
-        if (parts.length < 2) continue
+        // Clean the text - remove encoding issues
+        text = cleanText(text)
         
-        var amount = 0
-        var name = 'Item'
-        var category = 'General'
+        // Detect currency
+        var currencySymbol = '$'
+        if (text.includes('₹') || text.includes('INR')) {
+          currencySymbol = '₹'
+        } else if (text.includes('€')) {
+          currencySymbol = '€'
+        } else if (text.includes('£')) {
+          currencySymbol = '£'
+        }
         
-        // Try to find amount in any column
-        for (var j = 0; j < parts.length; j++) {
-          var val = parts[j].trim()
-          // Look for amount with or without currency symbol
-          var match = val.match(/[\$₹€£]?\s*(\d+(?:,\d{3})*(?:\.\d{2})?)/)
-          if (match) {
-            var numStr = match[1].replace(/,/g, '')
-            amount = parseFloat(numStr)
-            if (amount > 0) {
-              // Name is usually in first column
-              if (parts[0]) name = parts[0].trim()
-              // Category can be from product column
-              if (parts.length > 2 && parts[2]) category = parts[2].trim()
-              break
+        // Split into lines
+        var lines = text.split('\n')
+        
+        // Remove empty lines
+        lines = lines.filter(function(line) { 
+          var trimmed = line.trim()
+          return trimmed.length > 0 && !trimmed.startsWith('#')
+        })
+        
+        var items = []
+        
+        // Process each line (skip header)
+        for (var i = 0; i < lines.length; i++) {
+          var line = lines[i].trim()
+          if (!line || line.length < 2) continue
+          
+          // Try different delimiters
+          var parts = line.split('\t')
+          if (parts.length < 2) parts = line.split(',')
+          if (parts.length < 2) parts = line.split(';')
+          
+          if (parts.length < 2) continue
+          
+          // Find amount
+          var amount = 0
+          var name = 'Item'
+          var category = 'General'
+          var date = new Date().toISOString().split('T')[0]
+          
+          for (var j = 0; j < parts.length; j++) {
+            var val = parts[j].trim()
+            
+            // Check for date
+            if (val.match(/\d{4}[-\/]\d{2}[-\/]\d{2}/)) {
+              date = val.replace(/\//g, '-')
             }
+            // Check for amount
+            else if (val.match(/[\$₹€£]?\d+/)) {
+              var numStr = val.replace(/[^0-9.]/g, '')
+              if (numStr && parseFloat(numStr) > 0) {
+                amount = parseFloat(numStr)
+              }
+            }
+          }
+          
+          if (amount > 0) {
+            if (parts[0]) name = parts[0].trim()
+            if (parts.length > 2 && parts[1]) category = parts[1].trim()
+            
+            items.push({
+              id: items.length + 1,
+              name: name,
+              amount: amount,
+              category: category,
+              date: date
+            })
           }
         }
         
-        if (amount > 0) {
-          items.push({
-            id: items.length + 1,
-            name: name,
-            amount: amount,
-            category: category,
-            date: new Date().toISOString().split('T')[0]
-          })
+        if (items.length === 0) {
+          alert('No valid data found! Please check your file format.')
+          setIsProcessing(false)
+          return
         }
-      }
-      
-      if (items.length === 0) {
-        alert('No valid amounts found! Please check your CSV format.')
+        
+        // Calculate insights
+        var total = items.reduce(function(sum, item) { return sum + item.amount }, 0)
+        var categories = [...new Set(items.map(function(item) { return item.category }))]
+        var categoryTotals = categories.map(function(cat) { 
+          return items.filter(function(item) { return item.category === cat })
+            .reduce(function(sum, item) { return sum + item.amount }, 0)
+        })
+        var topCategoryIndex = categoryTotals.indexOf(Math.max.apply(null, categoryTotals))
+        var topCategory = categories[topCategoryIndex] || 'General'
+        var avgPerItem = items.length > 0 ? total / items.length : 0
+        
+        var projectData = {
+          name: projectName,
+          items: items,
+          insights: {
+            total: total,
+            topCategory: topCategory,
+            avgPerItem: avgPerItem,
+            highestExpense: items.length > 0 ? Math.max.apply(null, items.map(function(i) { return i.amount })) : 0,
+            recommendation: 'Your biggest expense is ' + topCategory
+          },
+          currency: currencySymbol
+        }
+        
+        saveProject(projectData)
+        setCurrentData(projectData)
+        setProjects(getUserProjects())
         setIsProcessing(false)
-        return
+        setShowResults(true)
+        
+      } catch (err) {
+        alert('Error: ' + err.message)
+        setIsProcessing(false)
       }
-      
-      // Calculate insights
-      var total = items.reduce(function(sum, item) { return sum + item.amount }, 0)
-      var categories = [...new Set(items.map(function(item) { return item.category }))]
-      var categoryTotals = categories.map(function(cat) { 
-        return items.filter(function(item) { return item.category === cat })
-          .reduce(function(sum, item) { return sum + item.amount }, 0)
-      })
-      var topCategoryIndex = categoryTotals.indexOf(Math.max.apply(null, categoryTotals))
-      var topCategory = categories[topCategoryIndex] || 'General'
-      var avgPerItem = items.length > 0 ? total / items.length : 0
-      
-      var projectData = {
-        name: projectName,
-        items: items,
-        insights: {
-          total: total,
-          topCategory: topCategory,
-          avgPerItem: avgPerItem,
-          highestExpense: items.length > 0 ? Math.max.apply(null, items.map(function(i) { return i.amount })) : 0,
-          recommendation: 'Your biggest expense is ' + topCategory
-        },
-        currency: currencySymbol
-      }
-      
-      saveProject(projectData)
-      setCurrentData(projectData)
-      setProjects(getUserProjects())
-      setIsProcessing(false)
-      setShowResults(true)
     }
     
+    reader.onerror = function() {
+      alert('Error reading file!')
+      setIsProcessing(false)
+    }
+    
+    // Read as UTF-8
     reader.readAsText(file, 'UTF-8')
+  }
+
+  function cleanText(text) {
+    if (!text) return ''
+    
+    // Remove BOM
+    text = text.replace(/^\uFEFF/, '')
+    text = text.replace(/^\uFFEF/, '')
+    text = text.replace(/^\uFEED/, '')
+    
+    // Fix line breaks
+    text = text.replace(/\r\n/g, '\n')
+    text = text.replace(/\r/g, '\n')
+    
+    // Remove encoding artifacts
+    text = text.replace(/[\u0000-\u001F\u007F-\u009F]/g, '')
+    
+    return text
   }
 
   function handleGoHome() {
