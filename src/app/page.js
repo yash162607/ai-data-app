@@ -60,59 +60,45 @@ export default function Home() {
     }
   }
 
-  // Create short share link - encode minimal data directly in URL
+  // Create share link - ONLY summary data (no items)
   function createShareLink(project) {
-    // Minimal data - only essential info
+    // Only summary - no items!
     var minData = {
-      n: project.name.substring(0, 20), // name (max 20 chars)
-      t: Math.round(project.insights.total), // total
-      c: project.currency, // currency
-      k: project.insights.topCategory.substring(0, 15), // top category
-      a: Math.round(project.insights.avgPerItem), // average
-      i: project.items.slice(0, 5).map(function(item) { // first 5 items
-        return { n: item.name.substring(0, 15), a: item.amount }
-      })
+      n: project.name,
+      t: Math.round(project.insights.total),
+      c: project.currency,
+      k: project.insights.topCategory,
+      a: Math.round(project.insights.avgPerItem),
+      cnt: project.items.length
     }
     
-    // Encode with minimal base64
     var encoded = btoa(JSON.stringify(minData))
-    // Remove extra chars
-    encoded = encoded.replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_')
+    encoded = encoded.replace(/=/g, '')
     
     return window.location.origin + '/s/' + encoded
   }
 
   function getShareMessage(project) {
-    return '📊 ' + project.name + '\n💰 Total: ' + project.currency + project.insights.total + '\n📈 Top: ' + project.insights.topCategory + '\n📊 Items: ' + project.items.length
+    return '📊 ' + project.name + '\n💰 Total: ' + project.currency + project.insights.total + '\n📈 Top: ' + project.insights.topCategory + '\n📊 Items: ' + project.items.length + '\n\n🔗 ' + createShareLink(project)
   }
 
   function copyLink() {
-    var link = createShareLink(selectedProject)
-    navigator.clipboard.writeText(link)
+    navigator.clipboard.writeText(createShareLink(selectedProject))
     setShareSuccess('Link copied!')
     setTimeout(function() { setShareSuccess('') }, 2000)
   }
 
   function shareWhatsApp() {
-    var link = createShareLink(selectedProject)
-    var msg = getShareMessage(selectedProject) + '\n\n🔗 ' + link
+    var msg = getShareMessage(selectedProject)
     window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank')
     setShareSuccess('WhatsApp opened!')
     setTimeout(function() { setShareSuccess('') }, 2000)
   }
 
   function shareTelegram() {
-    var link = createShareLink(selectedProject)
-    var msg = getShareMessage(selectedProject) + '\n\n' + link
+    var msg = getShareMessage(selectedProject) 
     window.open('https://t.me/share/url?text=' + encodeURIComponent(msg), '_blank')
     setShareSuccess('Telegram opened!')
-    setTimeout(function() { setShareSuccess('') }, 2000)
-  }
-
-  function shareCopy() {
-    var msg = getShareMessage(selectedProject) + '\n\nLink: ' + createShareLink(selectedProject)
-    navigator.clipboard.writeText(msg)
-    setShareSuccess('Copied!')
     setTimeout(function() { setShareSuccess('') }, 2000)
   }
 
@@ -158,10 +144,6 @@ export default function Home() {
           
           <button onClick={shareTelegram} className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold mb-4 ml-4">
             ✈️ Telegram
-          </button>
-          
-          <button onClick={shareCopy} className="bg-purple-500 text-white px-6 py-3 rounded-lg font-semibold mb-4 ml-4">
-            📋 Copy All
           </button>
           
           {deleteConfirm !== selectedProject.id && (
