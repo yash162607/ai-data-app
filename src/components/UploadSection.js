@@ -38,6 +38,7 @@ export default function UploadSection({ onProcessData, isProcessing }) {
             <div className="flex flex-col items-center">
               <FileText className="w-12 h-12 text-green-500 mb-4" />
               <p className="text-sm text-gray-500 mb-4">{selectedFile.name}</p>
+              <p className="text-xs text-gray-400 mb-4">(Size: {(selectedFile.size / 1024).toFixed(1)} KB)</p>
               
               <input
                 type="text"
@@ -59,7 +60,7 @@ export default function UploadSection({ onProcessData, isProcessing }) {
             <div className="flex flex-col items-center">
               <Upload className="w-12 h-12 mx-auto mb-4 text-gray-400" />
               <h3 className="text-xl font-bold mb-2">Upload Your File</h3>
-              <p className="text-gray-600 mb-4">CSV or Text file with data</p>
+              <p className="text-gray-600 mb-4">CSV, TXT, or any text file</p>
               <button 
                 onClick={chooseFile}
                 className="bg-blue-500 text-white px-8 py-3 rounded-lg font-semibold"
@@ -71,7 +72,7 @@ export default function UploadSection({ onProcessData, isProcessing }) {
                 type="file"
                 className="hidden"
                 onChange={handleFileChange}
-                accept=".csv,.txt"
+                accept=".csv,.txt,.tsv,.text"
               />
             </div>
           )}
