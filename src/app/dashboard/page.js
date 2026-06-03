@@ -5,9 +5,8 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '../../context/auth'
 import Navbar from '../../components/Navbar'
 import UploadSection from '../../components/UploadSection'
-import Dashboard from '../../components/Dashboard'
+import DashboardView from '../../components/Dashboard'
 import Footer from '../../components/Footer'
-import { Home, Plus } from 'lucide-react'
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -34,12 +33,13 @@ export default function DashboardPage() {
     reader.onload = function(e) {
       var text = e.target.result
       
+      // Detect currency
       var currencySymbol = '$'
       if (text.includes('₹') || text.includes('INR')) {
         currencySymbol = '₹'
-      } else if (text.includes('€') || text.includes('EUR')) {
+      } else if (text.includes('€')) {
         currencySymbol = '€'
-      } else if (text.includes('£') || text.includes('GBP')) {
+      } else if (text.includes('£')) {
         currencySymbol = '£'
       }
       
@@ -48,21 +48,69 @@ export default function DashboardPage() {
       
       for (var i = 1; i < lines.length; i++) {
         var parts = lines[i].split(',')
+        
+        // Try to find amount - look for $ or number in any column
+        var amount = 0
+        var name = 'Item'
+        var category = 'General'
+        
         if (parts.length >= 2) {
-          var amountStr = parts[parts.length - 1].replace(/[^0-9.-]/g, '')
-          var amount = parseFloat(amountStr)
-          if (amount > 0) {
-            items.push({
-              id: items.length + 1,
-              name: parts[1] ? parts[1].trim() : (parts[0] ? parts[0].trim() : 'Item'),
-              amount: amount,
-              category: parts[2] ? parts[2].trim() : 'Other',
-              date: parts[3] ? parts[3].trim() : new Date().toISOString().split('T')[0]
-            })
+          // Find amount in any column (look for numbers or $)
+          for (var j = 0; j < parts.length; j++) {
+            var val = parts[j].trim()
+            // Check if contains number or currency symbol
+            if (val.match(/[\$₹€£]?\d+/)) {
+              // Extract number
+              var num = val.replace(/[^0-9.]/g, '')
+              if (num && parseFloat(num) > 0) {
+                amount = parseFloat(num)
+                // Use column before for name (usually)
+                if (j > 0) {
+                  name = parts[j - 1].trim()
+                }
+                break
+              }
+            }
           }
+          
+          // If no amount found, try last column as fallback
+          if (amount === 0) {
+            var lastCol = parts[parts.length - 1].trim()
+            var num = lastCol.replace(/[^0-9.]/g, '')
+            if (num && parseFloat(num) > 0) {
+              amount = parseFloat(num)
+            }
+          }
+          
+          // Get name from first column if not set
+          if (parts[0]) {
+            name = parts[0].trim()
+          }
+          
+          // Get category from middle columns (like product column)
+          if (parts.length >= 6) {
+            category = parts[parts.length - 2].trim() || 'General'
+          }
+        }
+        
+        if (amount > 0) {
+          items.push({
+            id: items.length + 1,
+            name: name,
+            amount: amount,
+            category: category,
+            date: new Date().toISOString().split('T')[0]
+          })
         }
       }
       
+      if (items.length === 0) {
+        alert('No valid data found! Make sure your CSV has numbers for amounts.')
+        setIsProcessing(false)
+        return
+      }
+      
+      // Calculate insights
       var total = items.reduce(function(sum, item) { return sum + item.amount }, 0)
       var categories = [...new Set(items.map(function(item) { return item.category }))]
       var categoryTotals = categories.map(function(cat) { 
@@ -74,7 +122,7 @@ export default function DashboardPage() {
       var avgPerItem = items.length > 0 ? total / items.length : 0
       
       var projectData = {
-        name: projectName, // Use the custom name
+        name: projectName,
         items: items,
         insights: {
           total: total,
@@ -86,7 +134,6 @@ export default function DashboardPage() {
         currency: currencySymbol
       }
       
-      // Save with custom name
       saveProject(projectData)
       setCurrentData(projectData)
       setProjects(getUserProjects())
@@ -97,11 +144,11 @@ export default function DashboardPage() {
     reader.readAsText(file)
   }
 
-  var handleGoHome = function() {
+  function handleGoHome() {
     router.push('/')
   }
 
-  var handleNewAnalysis = function() {
+  function handleNewAnalysis() {
     setShowResults(false)
     setCurrentData(null)
   }
@@ -138,10 +185,9 @@ export default function DashboardPage() {
           <div className="text-center py-8">
             <button 
               onClick={handleGoHome}
-              className="bg-gray-200 text-gray-700 px-6 py-3 rounded-lg font-semibold hover:bg-gray-300 transition inline-flex items-center gap-2"
+              className="bg-gray-200 text-gray-700 px-6 py-3 rounded-lg font-semibold"
             >
-              <Home className="w-5 h-5" />
-              Back to Home
+              ← Back to Home
             </button>
           </div>
         </div>
@@ -150,20 +196,18 @@ export default function DashboardPage() {
           <div className="max-w-6xl mx-auto px-4 pt-8 flex gap-4">
             <button 
               onClick={handleGoHome}
-              className="bg-gray-800 text-white px-6 py-3 rounded-lg font-semibold inline-flex items-center gap-2"
+              className="bg-gray-800 text-white px-6 py-3 rounded-lg font-semibold"
             >
-              <Home className="w-5 h-5" />
-              Back to Home
+              ← Back to Home
             </button>
             <button 
               onClick={handleNewAnalysis}
-              className="bg-blue-500 text-white px-6 py-3 rounded-lg font-semibold inline-flex items-center gap-2"
+              className="bg-blue-500 text-white px-6 py-3 rounded-lg font-semibold"
             >
-              <Plus className="w-5 h-5" />
-              New Upload
+              + New Upload
             </button>
           </div>
-          <Dashboard data={currentData} />
+          <DashboardView data={currentData} />
         </div>
       )}
       
