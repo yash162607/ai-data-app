@@ -8,25 +8,13 @@ import UploadSection from '../../components/UploadSection'
 import Footer from '../../components/Footer'
 
 export default function DashboardPage() {
-  var router = useRouter()
-  var _a = useAuth()
-  var user = _a.user
-  var logout = _a.logout
-  var saveProject = _a.saveProject
-  var getUserProjects = _a.getUserProjects
+  const router = useRouter()
+  const { user, logout, saveProject, getUserProjects } = useAuth()
   
-  var _b = useState(false)
-  var isProcessing = _b[0]
-  var setIsProcessing = _b[1]
-  var _c = useState(false)
-  var showResults = _c[0]
-  var setShowResults = _c[1]
-  var _d = useState(null)
-  var currentData = _d[0]
-  var setCurrentData = _d[1]
-  var _e = useState([])
-  var projects = _e[0]
-  var setProjects = _e[1]
+  const [isProcessing, setIsProcessing] = useState(false)
+  const [showResults, setShowResults] = useState(false)
+  const [currentData, setCurrentData] = useState(null)
+  const [projects, setProjects] = useState([])
 
   useEffect(function() {
     if (!user) {
@@ -34,15 +22,15 @@ export default function DashboardPage() {
     } else {
       setProjects(getUserProjects())
     }
-  }, [user])
+  }, [user, router, getUserProjects])
 
   function handleProcessData(file, projectName) {
     setIsProcessing(true)
     
-    var reader = new FileReader()
+    const reader = new FileReader()
     
     reader.onload = function(e) {
-      var text = e.target.result
+      let text = e.target.result
       
       if (!text) {
         alert('File is empty!')
@@ -52,30 +40,30 @@ export default function DashboardPage() {
       
       text = text.replace(/^\uFEFF/, '')
       
-      var currency = '$'
-      if (text.indexOf('₹') > -1) currency = '₹'
-      else if (text.indexOf('€') > -1) currency = '€'
-      else if (text.indexOf('£') > -1) currency = '£'
+      let currency = '$'
+      if (text.includes('₹') || text.includes('INR')) currency = '₹'
+      else if (text.includes('€')) currency = '€'
+      else if (text.includes('£')) currency = '£'
       
-      var lines = text.split('\n')
-      var items = []
+      const lines = text.split('\n')
+      const items = []
       
-      for (var i = 0; i < lines.length; i++) {
-        var line = lines[i].trim()
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim()
         if (!line) continue
         
-        var parts = line.split(/[\t,;]+/)
+        const parts = line.split(/[\t,;]+/)
         if (parts.length < 2) continue
         
-        var amount = 0
-        var name = 'Item'
-        var category = 'General'
+        let amount = 0
+        let name = 'Item'
+        let category = 'General'
         
-        for (var j = 0; j < parts.length; j++) {
-          var val = parts[j].trim()
-          var num = val.replace(/[^0-9.]/g, '')
+        for (let j = 0; j < parts.length; j++) {
+          const val = parts[j].trim()
+          const num = val.replace(/[^0-9.]/g, '')
           if (num && num !== '.') {
-            var parsed = parseFloat(num)
+            const parsed = parseFloat(num)
             if (parsed > 0 && parsed < 10000000) {
               amount = parsed
               if (j === 0) name = parts[0].trim()
@@ -101,17 +89,17 @@ export default function DashboardPage() {
         return
       }
       
-      var total = items.reduce(function(sum, item) { return sum + item.amount }, 0)
+      const total = items.reduce(function(sum, item) { return sum + item.amount }, 0)
       
-      var categories = {}
+      const categories = {}
       items.forEach(function(item) {
-        var cat = item.category
+        const cat = item.category
         if (!categories[cat]) categories[cat] = 0
         categories[cat] = categories[cat] + item.amount
       })
       
-      var topCategory = 'General'
-      var maxVal = 0
+      let topCategory = 'General'
+      let maxVal = 0
       Object.keys(categories).forEach(function(cat) {
         if (categories[cat] > maxVal) {
           maxVal = categories[cat]
@@ -119,9 +107,9 @@ export default function DashboardPage() {
         }
       })
       
-      var avgPerItem = items.length > 0 ? total / items.length : 0
+      const avgPerItem = items.length > 0 ? total / items.length : 0
       
-      var projectData = {
+      const projectData = {
         name: projectName,
         items: items,
         insights: {
@@ -158,138 +146,138 @@ export default function DashboardPage() {
   }
 
   if (showResults && currentData) {
-    var chartData = {}
+    const chartData = {}
     currentData.items.forEach(function(item) {
-      var cat = item.category
+      const cat = item.category
       if (!chartData[cat]) chartData[cat] = 0
       chartData[cat] = chartData[cat] + item.amount
     })
     
-    var chartKeys = Object.keys(chartData)
-    var maxChart = 0
+    const chartKeys = Object.keys(chartData)
+    let maxChart = 0
     chartKeys.forEach(function(key) {
       if (chartData[key] > maxChart) maxChart = chartData[key]
     })
 
     return (
-      React.createElement('main', { className: 'min-h-screen bg-gradient-to-b from-gray-50 to-white' },
-        React.createElement(Navbar, null),
-        React.createElement('div', { className: 'bg-white shadow-sm py-3' },
-          React.createElement('div', { className: 'max-w-7xl mx-auto px-4 flex justify-between items-center' },
-            React.createElement('span', { className: 'font-medium' }, 'Welcome, ', user.name),
-            React.createElement('button', { onClick: logout, className: 'text-gray-600 text-sm' }, 'Logout')
-          )
-        ),
+      <main className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
+        <Navbar />
+        <div className="bg-white shadow-sm py-3">
+          <div className="max-w-7xl mx-auto px-4 flex justify-between items-center">
+            <span className="font-medium">Welcome, {user.name}</span>
+            <button onClick={logout} className="text-gray-600 text-sm">Logout</button>
+          </div>
+        </div>
         
-        React.createElement('div', { className: 'max-w-6xl mx-auto px-4 pt-8' },
-          React.createElement('button', { onClick: handleGoHome, className: 'bg-gray-800 text-white px-6 py-3 rounded-lg mr-4' }, 'Back'),
-          React.createElement('button', { onClick: handleNewAnalysis, className: 'bg-blue-500 text-white px-6 py-3 rounded-lg' }, 'New Upload')
-        ),
+        <div className="max-w-6xl mx-auto px-4 pt-8">
+          <button onClick={handleGoHome} className="bg-gray-800 text-white px-6 py-3 rounded-lg mr-4">Back</button>
+          <button onClick={handleNewAnalysis} className="bg-blue-500 text-white px-6 py-3 rounded-lg">New Upload</button>
+        </div>
         
-        React.createElement('div', { className: 'max-w-6xl mx-auto px-4 py-8' },
-          React.createElement('h2', { className: 'text-3xl font-bold mb-6' }, currentData.name),
+        <div className="max-w-6xl mx-auto px-4 py-8">
+          <h2 className="text-3xl font-bold mb-6">{currentData.name}</h2>
           
-          React.createElement('div', { className: 'grid grid-cols-4 gap-4 mb-8' },
-            React.createElement('div', { className: 'bg-blue-500 text-white p-6 rounded-xl text-center' },
-              React.createElement('p', { className: 'text-3xl font-bold' }, currentData.currency, currentData.insights.total),
-              React.createElement('p', { className: 'text-sm opacity-80' }, 'Total')
-            ),
-            React.createElement('div', { className: 'bg-green-500 text-white p-6 rounded-xl text-center' },
-              React.createElement('p', { className: 'text-3xl font-bold' }, currentData.insights.topCategory),
-              React.createElement('p', { className: 'text-sm opacity-80' }, 'Top')
-            ),
-            React.createElement('div', { className: 'bg-purple-500 text-white p-6 rounded-xl text-center' },
-              React.createElement('p', { className: 'text-3xl font-bold' }, currentData.currency, currentData.insights.avgPerItem.toFixed(0)),
-              React.createElement('p', { className: 'text-sm opacity-80' }, 'Average')
-            ),
-            React.createElement('div', { className: 'bg-orange-500 text-white p-6 rounded-xl text-center' },
-              React.createElement('p', { className: 'text-3xl font-bold' }, currentData.items.length),
-              React.createElement('p', { className: 'text-sm opacity-80' }, 'Items')
-            )
-          ),
+          <div className="grid grid-cols-4 gap-4 mb-8">
+            <div className="bg-blue-500 text-white p-6 rounded-xl text-center">
+              <p className="text-3xl font-bold">{currentData.currency}{currentData.insights.total}</p>
+              <p className="text-sm opacity-80">Total</p>
+            </div>
+            <div className="bg-green-500 text-white p-6 rounded-xl text-center">
+              <p className="text-3xl font-bold">{currentData.insights.topCategory}</p>
+              <p className="text-sm opacity-80">Top</p>
+            </div>
+            <div className="bg-purple-500 text-white p-6 rounded-xl text-center">
+              <p className="text-3xl font-bold">{currentData.currency}{currentData.insights.avgPerItem.toFixed(0)}</p>
+              <p className="text-sm opacity-80">Average</p>
+            </div>
+            <div className="bg-orange-500 text-white p-6 rounded-xl text-center">
+              <p className="text-3xl font-bold">{currentData.items.length}</p>
+              <p className="text-sm opacity-80">Items</p>
+            </div>
+          </div>
           
-          React.createElement('div', { className: 'bg-white rounded-2xl p-6 shadow-lg mb-8' },
-            React.createElement('h3', { className: 'text-xl font-bold mb-4' }, 'Category Breakdown'),
-            React.createElement('div', { className: 'space-y-3' },
-              chartKeys.map(function(key) {
-                var value = chartData[key]
-                var percent = maxChart > 0 ? (value / maxChart) * 100 : 0
-                var colors = ['bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-orange-500', 'bg-red-500']
-                var color = colors[chartKeys.indexOf(key) % colors.length]
+          <div className="bg-white rounded-2xl p-6 shadow-lg mb-8">
+            <h3 className="text-xl font-bold mb-4">Category Breakdown</h3>
+            <div className="space-y-3">
+              {chartKeys.map(function(key) {
+                const value = chartData[key]
+                const percent = maxChart > 0 ? (value / maxChart) * 100 : 0
+                const colors = ['bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-orange-500', 'bg-red-500']
+                const color = colors[chartKeys.indexOf(key) % colors.length]
                 return (
-                  React.createElement('div', { key: key },
-                    React.createElement('div', { className: 'flex justify-between mb-1' },
-                      React.createElement('span', { className: 'font-medium' }, key),
-                      React.createElement('span', null, currentData.currency, value)
-                    ),
-                    React.createElement('div', { className: 'w-full bg-gray-200 rounded-full h-4' },
-                      React.createElement('div', { className: color + ' h-4 rounded-full', style: { width: percent + '%' } })
-                    )
-                  )
+                  <div key={key}>
+                    <div className="flex justify-between mb-1">
+                      <span className="font-medium">{key}</span>
+                      <span>{currentData.currency}{value}</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-4">
+                      <div className={color + ' h-4 rounded-full'} style={{ width: percent + '%' }}></div>
+                    </div>
+                  </div>
                 )
-              })
-            )
-          ),
+              })}
+            </div>
+          </div>
           
-          React.createElement('div', { className: 'bg-white rounded-2xl p-6 shadow-lg mb-8' },
-            React.createElement('h3', { className: 'text-xl font-bold mb-4' }, 'Recommendation'),
-            React.createElement('p', { className: 'text-gray-600' }, currentData.insights.recommendation)
-          ),
+          <div className="bg-white rounded-2xl p-6 shadow-lg mb-8">
+            <h3 className="text-xl font-bold mb-4">Recommendation</h3>
+            <p className="text-gray-600">{currentData.insights.recommendation}</p>
+          </div>
           
-          React.createElement('div', { className: 'bg-white rounded-2xl p-6 shadow-lg' },
-            React.createElement('h3', { className: 'text-xl font-bold mb-4' }, 'All Transactions'),
-            React.createElement('div', { className: 'overflow-x-auto' },
-              React.createElement('table', { className: 'w-full' },
-                React.createElement('thead', null,
-                  React.createElement('tr', { className: 'border-b' },
-                    React.createElement('th', { className: 'text-left py-3' }, 'Item'),
-                    React.createElement('th', { className: 'text-left py-3' }, 'Category'),
-                    React.createElement('th', { className: 'text-right py-3' }, 'Amount')
-                  )
-                ),
-                React.createElement('tbody', null,
-                  currentData.items.map(function(item) {
+          <div className="bg-white rounded-2xl p-6 shadow-lg">
+            <h3 className="text-xl font-bold mb-4">All Transactions</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left py-3">Item</th>
+                    <th className="text-left py-3">Category</th>
+                    <th className="text-right py-3">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {currentData.items.map(function(item) {
                     return (
-                      React.createElement('tr', { key: item.id, className: 'border-b' },
-                        React.createElement('td', { className: 'py-3' }, item.name),
-                        React.createElement('td', { className: 'py-3' }, item.category),
-                        React.createElement('td', { className: 'py-3 text-right' }, currentData.currency, item.amount)
-                      )
+                      <tr key={item.id} className="border-b">
+                        <td className="py-3">{item.name}</td>
+                        <td className="py-3">{item.category}</td>
+                        <td className="py-3 text-right">{currentData.currency}{item.amount}</td>
+                      </tr>
                     )
-                  })
-                )
-              )
-            )
-          )
-        ),
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
         
-        React.createElement(Footer, null)
-      )
+        <Footer />
+      </main>
     )
   }
 
   return (
-    React.createElement('main', { className: 'min-h-screen bg-gradient-to-b from-gray-50 to-white' },
-      React.createElement(Navbar, null),
-      React.createElement('div', { className: 'bg-white shadow-sm py-3' },
-        React.createElement('div', { className: 'max-w-7xl mx-auto px-4 flex justify-between items-center' },
-          React.createElement('span', { className: 'font-medium' }, 'Welcome, ', user.name),
-          React.createElement('div', { className: 'flex gap-4' },
-            React.createElement('button', { onClick: handleGoHome, className: 'text-blue-500 text-sm' }, 'Home'),
-            React.createElement('button', { onClick: logout, className: 'text-gray-600 text-sm' }, 'Logout')
-          )
-        )
-      ),
+    <main className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
+      <Navbar />
+      <div className="bg-white shadow-sm py-3">
+        <div className="max-w-7xl mx-auto px-4 flex justify-between items-center">
+          <span className="font-medium">Welcome, {user.name}</span>
+          <div className="flex gap-4">
+            <button onClick={handleGoHome} className="text-blue-500 text-sm">Home</button>
+            <button onClick={logout} className="text-gray-600 text-sm">Logout</button>
+          </div>
+        </div>
+      </div>
       
-      React.createElement(UploadSection, { onProcessData: handleProcessData, isProcessing: isProcessing }),
+      <UploadSection onProcessData={handleProcessData} isProcessing={isProcessing} />
       
-      React.createElement('div', { className: 'text-center py-8' },
-        React.createElement('button', { onClick: handleGoHome, className: 'bg-gray-200 text-gray-700 px-6 py-3 rounded-lg' },
-          'Back to Home'
-        )
-      ),
+      <div className="text-center py-8">
+        <button onClick={handleGoHome} className="bg-gray-200 text-gray-700 px-6 py-3 rounded-lg">
+          Back to Home
+        </button>
+      </div>
       
-      React.createElement(Footer, null)
-    )
+      <Footer />
+    </main>
   )
 }

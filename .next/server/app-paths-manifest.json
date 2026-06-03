@@ -1,7 +1,1 @@
-{
-  "/_not-found": "app/_not-found.js",
-  "/auth/page": "app/auth/page.js",
-  "/shared/page": "app/shared/page.js",
-  "/page": "app/page.js",
-  "/dashboard/page": "app/dashboard/page.js"
-}
+{}
