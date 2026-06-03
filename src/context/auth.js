@@ -2,15 +2,23 @@
 
 import { createContext, useContext, useState, useEffect } from 'react'
 
-const AuthContext = createContext()
+var AuthContext = createContext()
 
-export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null)
-  const [users, setUsers] = useState([])
-  const [userProjects, setUserProjects] = useState({})
-  const [isLoaded, setIsLoaded] = useState(false)
+export function AuthProvider(_a) {
+  var children = _a.children
+  var _b = useState(null)
+  var user = _b[0]
+  var setUser = _b[1]
+  var _c = useState([])
+  var users = _c[0]
+  var setUsers = _c[1]
+  var _d = useState({})
+  var userProjects = _d[0]
+  var setUserProjects = _d[1]
+  var _e = useState(false)
+  var isLoaded = _e[0]
+  var setIsLoaded = _e[1]
 
-  // Load everything on startup
   useEffect(function() {
     loadData()
   }, [])
@@ -31,7 +39,6 @@ export function AuthProvider({ children }) {
         setUserProjects(JSON.parse(savedProjects))
       }
       
-      // Restore logged in user
       if (savedCurrentUser && allUsers.length > 0) {
         var currentUser = allUsers.find(function(u) { return u.email === savedCurrentUser })
         if (currentUser) {
@@ -45,7 +52,6 @@ export function AuthProvider({ children }) {
     setIsLoaded(true)
   }
 
-  // Save when data changes
   useEffect(function() {
     if (isLoaded) {
       localStorage.setItem('ai_users', JSON.stringify(users))
@@ -58,15 +64,18 @@ export function AuthProvider({ children }) {
     }
   }, [userProjects, isLoaded])
 
-  const signup = function(email, password, name) {
+  function signup(email, password, name) {
     if (users.find(function(u) { return u.email === email })) {
       return { success: false, message: 'Email already exists' }
     }
     
     var newUser = { id: Date.now(), email: email, password: password, name: name }
-    setUsers(function(prev) { return [...prev, newUser] })
+    setUsers(function(prev) { return prev.concat(newUser) })
     setUserProjects(function(prev) {
-      var newData = Object.assign({}, prev)
+      var newData = {}
+      for (var key in prev) {
+        newData[key] = prev[key]
+      }
       newData[email] = []
       return newData
     })
@@ -76,7 +85,7 @@ export function AuthProvider({ children }) {
     return { success: true, user: newUser }
   }
 
-  const login = function(email, password) {
+  function login(email, password) {
     var foundUser = users.find(function(u) { return u.email === email && u.password === password })
     if (foundUser) {
       setUser(foundUser)
@@ -86,56 +95,60 @@ export function AuthProvider({ children }) {
     return { success: false, message: 'Invalid email or password' }
   }
 
-  const logout = function() {
+  function logout() {
     setUser(null)
-    // Keep data but remove current user session
     localStorage.removeItem('ai_current_user')
   }
 
-  const saveProject = function(project) {
+  function saveProject(project) {
     if (!user) return
     
-    var newProject = Object.assign({
-      id: Date.now(),
-      savedAt: new Date().toISOString()
-    }, project)
+    var newProject = {}
+    for (var key in project) {
+      newProject[key] = project[key]
+    }
+    newProject.id = Date.now()
+    newProject.savedAt = new Date().toISOString()
     
     setUserProjects(function(prev) {
-      var list = prev[user.email] || []
-      return Object.assign({}, prev, {
-        [user.email]: [...list, newProject]
-      })
+      var newData = {}
+      for (var key in prev) {
+        newData[key] = prev[key]
+      }
+      var list = newData[user.email] || []
+      newData[user.email] = list.concat(newProject)
+      return newData
     })
   }
 
-  const deleteProject = function(projectId) {
+  function deleteProject(projectId) {
     if (!user) return
     
     setUserProjects(function(prev) {
-      var list = prev[user.email] || []
-      var updated = list.filter(function(p) { return p.id !== projectId })
-      return Object.assign({}, prev, {
-        [user.email]: updated
-      })
+      var newData = {}
+      for (var key in prev) {
+        newData[key] = prev[key]
+      }
+      var list = newData[user.email] || []
+      newData[user.email] = list.filter(function(p) { return p.id !== projectId })
+      return newData
     })
   }
 
-  const getUserProjects = function() {
+  function getUserProjects() {
     if (user && userProjects[user.email]) {
       return userProjects[user.email]
     }
     return []
   }
 
-  // Force refresh
-  const refresh = function() {
+  function refresh() {
     loadData()
   }
 
   return (
     <AuthContext.Provider value={{ 
       user: user, 
-      users: users,
       signup: signup, 
       login: login, 
       logout: logout,

@@ -1,10 +1,9 @@
 export default function Footer() {
   return (
-    <footer className="bg-gray-900 text-white py-12 px-4">
-      <div className="max-w-7xl mx-auto text-center">
-        <p className="text-xl font-bold mb-2">DataAI</p>
-        <p className="text-gray-400">Transform your data with AI</p>
-        <p className="text-gray-500 mt-8">© 2024 DataAI. All rights reserved.</p>
+    <footer className="bg-gray-800 text-white py-8 mt-auto">
+      <div className="max-w-7xl mx-auto px-4 text-center">
+        <p>DataAI - Transform your data into insights</p>
+        <p className="text-gray-400 text-sm mt-2">© 2024 DataAI</p>
       </div>
     </footer>
   )
