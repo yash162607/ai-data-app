@@ -5,11 +5,10 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '../context/auth'
 import Navbar from '../components/Navbar'
 import Footer from '../components/Footer'
-import Dashboard from '../components/Dashboard'
 
 export default function Home() {
   const router = useRouter()
-  const { user, getUserProjects, logout, deleteProject, refresh, isLoaded } = useAuth()
+  const { user, getUserProjects, logout, refresh, isLoaded } = useAuth()
   
   const [showFullAnalysis, setShowFullAnalysis] = useState(false)
   const [selectedProject, setSelectedProject] = useState(null)
@@ -23,47 +22,63 @@ export default function Home() {
     }
   }, [user, isLoaded])
 
-  var hasProjects = projects && projects.length > 0
+  useEffect(function() {
+    function handleFocus() {
+      refresh()
+      if (user) {
+        setProjects(getUserProjects())
+      }
+    }
+    window.addEventListener('focus', handleFocus)
+    return function() {
+      window.removeEventListener('focus', handleFocus)
+    }
+  }, [user])
 
-  var handleStart = function() {
-    if (user) router.push('/dashboard')
-    else router.push('/auth')
+  const hasProjects = projects && projects.length > 0
+
+  function handleStart() {
+    if (user) {
+      router.push('/dashboard')
+    } else {
+      router.push('/auth')
+    }
   }
 
-  var handleLogout = function() {
+  function handleLogout() {
     logout()
     router.push('/')
   }
 
-  var handleViewAnalysis = function(project) {
+  function handleViewAnalysis(project) {
     setSelectedProject(project)
     setShowFullAnalysis(true)
   }
 
-  var handleGoBack = function() {
+  function handleGoBack() {
     setShowFullAnalysis(false)
     setSelectedProject(null)
     setDeleteConfirm(null)
   }
 
-  function handleDeleteClick(id) {
-    setDeleteConfirm(id)
+  function handleDeleteClick(projectId) {
+    setDeleteConfirm(projectId)
   }
 
-  var confirmDelete = function(id) {
-    deleteProject(id)
+  function confirmDelete(projectId) {
+    const { deleteProject } = useAuth ? require('../context/auth').useAuth() : { deleteProject: () => {} }
+    deleteProject(projectId)
     setDeleteConfirm(null)
     setProjects(getUserProjects())
-    if (selectedProject && selectedProject.id === id) {
+    
+    if (selectedProject && selectedProject.id === projectId) {
       setShowFullAnalysis(false)
       setSelectedProject(null)
     }
   }
 
-  // Create share link - ONLY summary data (no items)
   function createShareLink(project) {
-    // Only summary - no items!
-    var minData = {
+    const minData = {
       n: project.name,
       t: Math.round(project.insights.total),
       c: project.currency,
@@ -72,33 +87,13 @@ export default function Home() {
       cnt: project.items.length
     }
     
-    var encoded = btoa(JSON.stringify(minData))
-    encoded = encoded.replace(/=/g, '')
-    
-    return window.location.origin + '/s/' + encoded
+    const encoded = btoa(JSON.stringify(minData))
+    return window.location.origin + '/s/' + encoded.replace(/=/g, '')
   }
 
-  function getShareMessage(project) {
-    return '📊 ' + project.name + '\n💰 Total: ' + project.currency + project.insights.total + '\n📈 Top: ' + project.insights.topCategory + '\n📊 Items: ' + project.items.length + '\n\n🔗 ' + createShareLink(project)
-  }
-
-  function copyLink() {
-    navigator.clipboard.writeText(createShareLink(selectedProject))
+  function handleCopyLink(project) {
+    navigator.clipboard.writeText(createShareLink(project))
     setShareSuccess('Link copied!')
-    setTimeout(function() { setShareSuccess('') }, 2000)
-  }
-
-  function shareWhatsApp() {
-    var msg = getShareMessage(selectedProject)
-    window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank')
-    setShareSuccess('WhatsApp opened!')
-    setTimeout(function() { setShareSuccess('') }, 2000)
-  }
-
-  function shareTelegram() {
-    var msg = getShareMessage(selectedProject) 
-    window.open('https://t.me/share/url?text=' + encodeURIComponent(msg), '_blank')
-    setShareSuccess('Telegram opened!')
     setTimeout(function() { setShareSuccess('') }, 2000)
   }
 
@@ -108,7 +103,8 @@ export default function Home() {
   }
 
   function formatDate(isoString) {
-    return new Date(isoString).toLocaleDateString()
+    const date = new Date(isoString)
+    return date.toLocaleDateString()
   }
 
   if (!isLoaded) {
@@ -119,7 +115,6 @@ export default function Home() {
     )
   }
 
-  // Full Analysis with Share
   if (showFullAnalysis && selectedProject) {
     return (
       <main className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
@@ -127,23 +122,15 @@ export default function Home() {
         
         <div className="max-w-6xl mx-auto px-4 pt-8">
           <button onClick={handleGoBack} className="bg-gray-800 text-white px-6 py-3 rounded-lg font-semibold mb-4">
-            ← Back
+            ← Back to Projects
           </button>
           
           {shareSuccess && (
             <span className="bg-green-500 text-white px-4 py-2 rounded-lg ml-4">{shareSuccess}</span>
           )}
           
-          <button onClick={copyLink} className="bg-blue-500 text-white px-6 py-3 rounded-lg font-semibold mb-4 ml-4">
-            {shareSuccess === 'Link copied!' ? '✓ Copied!' : '🔗 Copy Link'}
-          </button>
-          
-          <button onClick={shareWhatsApp} className="bg-green-500 text-white px-6 py-3 rounded-lg font-semibold mb-4 ml-4">
-            💬 WhatsApp
-          </button>
-          
-          <button onClick={shareTelegram} className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold mb-4 ml-4">
-            ✈️ Telegram
+          <button onClick={function() { handleCopyLink(selectedProject) }} className="bg-blue-500 text-white px-6 py-3 rounded-lg font-semibold mb-4 ml-4">
+            🔗 Share
           </button>
           
           {deleteConfirm !== selectedProject.id && (
@@ -161,12 +148,48 @@ export default function Home() {
           )}
         </div>
         
-        <Dashboard data={selectedProject} />
+        {/* Project Results */}
+        <div className="max-w-6xl mx-auto px-4 py-8">
+          <h2 className="text-3xl font-bold mb-6">{selectedProject.name}</h2>
+          
+          <div className="grid grid-cols-4 gap-4 mb-8">
+            <div className="bg-blue-500 text-white p-6 rounded-xl text-center">
+              <p className="text-3xl font-bold">{selectedProject.currency}{selectedProject.insights.total}</p>
+              <p className="text-sm opacity-80">Total</p>
+            </div>
+            <div className="bg-green-500 text-white p-6 rounded-xl text-center">
+              <p className="text-3xl font-bold">{selectedProject.insights.topCategory}</p>
+              <p className="text-sm opacity-80">Top</p>
+            </div>
+            <div className="bg-purple-500 text-white p-6 rounded-xl text-center">
+              <p className="text-3xl font-bold">{selectedProject.currency}{selectedProject.insights.avgPerItem.toFixed(0)}</p>
+              <p className="text-sm opacity-80">Average</p>
+            </div>
+            <div className="bg-orange-500 text-white p-6 rounded-xl text-center">
+              <p className="text-3xl font-bold">{selectedProject.items.length}</p>
+              <p className="text-sm opacity-80">Items</p>
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-2xl p-6 shadow-lg">
+            <h3 className="text-xl font-bold mb-4">All Items</h3>
+            <div className="space-y-2">
+              {selectedProject.items.map(function(item) {
+                return (
+                  <div key={item.id} className="flex justify-between p-3 bg-gray-50 rounded-lg">
+                    <span>{item.name}</span>
+                    <span>{item.category}</span>
+                    <span className="font-bold">{selectedProject.currency}{item.amount}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
       </main>
     )
   }
 
-  // Home View
   return (
     <main className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
       <Navbar />
@@ -206,7 +229,12 @@ export default function Home() {
       {user && hasProjects && (
         <section className="py-16 px-4">
           <div className="max-w-4xl mx-auto">
-            <h2 className="text-3xl font-bold mb-8 text-center">Your Projects</h2>
+            <div className="flex justify-between items-center mb-8">
+              <h2 className="text-3xl font-bold">Your Projects</h2>
+              <button onClick={handleRefresh} className="p-2 bg-gray-100 rounded-lg">
+                🔄
+              </button>
+            </div>
             
             <div className="space-y-4">
               {projects.map(function(project) {
