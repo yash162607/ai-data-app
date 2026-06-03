@@ -23,7 +23,7 @@ export default function DashboardPage() {
     } else {
       setProjects(getUserProjects())
     }
-  }, [user])
+  }, [user, router, getUserProjects])
 
   function handleProcessData(file, projectName) {
     setIsProcessing(true)
@@ -34,16 +34,13 @@ export default function DashboardPage() {
       try {
         var text = e.target.result
         
-        // Debug: log first 500 chars
-        console.log('Raw text:', text.substring(0, 500))
-        
         if (!text) {
           alert('File is empty!')
           setIsProcessing(false)
           return
         }
         
-        // Simple clean - just remove BOM and normalize lines
+        // Clean text
         text = text.replace(/^\uFEFF/, '')
         text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
         
@@ -53,36 +50,22 @@ export default function DashboardPage() {
         else if (text.includes('€')) currency = '€'
         else if (text.includes('£')) currency = '£'
         
-        // Split by new lines
+        // Split lines
         var lines = text.split('\n').filter(function(l) { return l.trim() })
-        
-        console.log('Lines found:', lines.length)
-        console.log('First 3 lines:', lines.slice(0, 3))
         
         var items = []
         
-        // Find header line index
-        var headerIndex = 0
-        for (var h = 0; h < Math.min(5, lines.length); h++) {
-          if (lines[h].toLowerCase().includes('amount') || lines[h].toLowerCase().includes('total') || lines[h].toLowerCase().includes('price') || lines[h].toLowerCase().includes('cost')) {
-            headerIndex = h
-            break
-          }
-        }
-        
-        // Process each line from header
-        for (var i = headerIndex + 1; i < lines.length; i++) {
+        // Process each line
+        for (var i = 0; i < lines.length; i++) {
           var line = lines[i].trim()
           if (!line || line.length < 2) continue
           
-          // Split by any delimiter
+          // Split by delimiter
           var parts = line.split(/[\t,;|]+/).filter(function(p) { return p.trim() })
-          
-          console.log('Line', i, ':', parts)
           
           if (parts.length < 2) continue
           
-          // Find amount - look for number in any column
+          // Find amount
           var amount = 0
           var name = 'Item'
           var category = 'General'
@@ -90,18 +73,16 @@ export default function DashboardPage() {
           for (var j = 0; j < parts.length; j++) {
             var val = parts[j].trim()
             
-            // Skip if it's a date
+            // Skip dates
             if (val.match(/\d{4}[-\/]\d{2}[-\/]\d{2}/)) continue
             
             // Get number
             var num = val.replace(/[^0-9.]/g, '')
             if (num && num.length > 0 && num !== '.') {
               var parsed = parseFloat(num)
-              if (parsed > 0 && parsed < 10000000) {  // Reasonable amount
+              if (parsed > 0 && parsed < 10000000) {
                 amount = parsed
-                // Use first column as name
                 if (j === 0 && parts[0]) name = parts[0].trim()
-                // Use second column as category if it's text
                 if (j === 1 && parts[1]) category = parts[1].trim()
               }
             }
@@ -118,23 +99,35 @@ export default function DashboardPage() {
           }
         }
         
-        console.log('Items found:', items.length)
-        
         if (items.length === 0) {
-          alert('No valid data! Make sure your file has numbers for amounts. Try checking Browser Console (F12) for debug info.')
+          alert('No valid data found!')
           setIsProcessing(false)
           return
         }
         
         // Calculate insights
         var total = items.reduce(function(sum, item) { return sum + item.amount }, 0)
-        var categories = [...new Set(items.map(function(item) { return item.category }))]
-        var categoryTotals = categories.map(function(cat) { 
-          return items.filter(function(item) { return item.category === cat })
-            .reduce(function(sum, item) { return sum + item.amount }, 0)
+        var categories = []
+        var categoryMap = {}
+        
+        items.forEach(function(item) {
+          if (!categoryMap[item.category]) {
+            categoryMap[item.category] = 0
+            categories.push(item.category)
+          }
+          categoryMap[item.category] += item.amount
         })
-        var topCategoryIndex = categoryTotals.indexOf(Math.max.apply(null, categoryTotals))
-        var topCategory = categories[topCategoryIndex] || 'General'
+        
+        var topCategory = categories[0] || 'General'
+        var maxAmount = categoryMap[topCategory] || 0
+        
+        categories.forEach(function(cat) {
+          if (categoryMap[cat] > maxAmount) {
+            maxAmount = categoryMap[cat]
+            topCategory = cat
+          }
+        })
+        
         var avgPerItem = items.length > 0 ? total / items.length : 0
         
         var projectData = {
@@ -179,17 +172,24 @@ export default function DashboardPage() {
     setCurrentData(null)
   }
 
-  if (!user) return null
+  if (!user) {
+    return null
+  }
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
       <Navbar />
+      
       <div className="bg-white shadow-sm py-3">
         <div className="max-w-7xl mx-auto px-4 flex justify-between items-center">
           <span className="font-medium">Welcome, {user.name}</span>
           <div className="flex gap-4">
-            <button onClick={handleGoHome} className="text-blue-500 text-sm">Home</button>
-            <button onClick={logout} className="text-gray-600 text-sm">Logout</button>
+            <button onClick={handleGoHome} className="text-blue-500 hover:text-blue-700 text-sm">
+              Home
+            </button>
+            <button onClick={logout} className="text-gray-600 hover:text-gray-800 text-sm">
+              Logout
+            </button>
           </div>
         </div>
       </div>
@@ -198,18 +198,25 @@ export default function DashboardPage() {
         <div>
           <UploadSection onProcessData={handleProcessData} isProcessing={isProcessing} />
           <div className="text-center py-8">
-            <button onClick={handleGoHome} className="bg-gray-200 px-6 py-3 rounded-lg">Back to Home</button>
+            <button onClick={handleGoHome} className="bg-gray-200 text-gray-700 px-6 py-3 rounded-lg font-semibold">
+              Back to Home
+            </button>
           </div>
         </div>
       ) : (
         <div>
           <div className="max-w-6xl mx-auto px-4 pt-8 flex gap-4">
-            <button onClick={handleGoHome} className="bg-gray-800 text-white px-6 py-3 rounded-lg">Back</button>
-            <button onClick={handleNewAnalysis} className="bg-blue-500 text-white px-6 py-3 rounded-lg">New Upload</button>
+            <button onClick={handleGoHome} className="bg-gray-800 text-white px-6 py-3 rounded-lg font-semibold">
+              Back to Home
+            </button>
+            <button onClick={handleNewAnalysis} className="bg-blue-500 text-white px-6 py-3 rounded-lg font-semibold">
+              New Upload
+            </button>
           </div>
           <DashboardView data={currentData} />
         </div>
       )}
+      
       <Footer />
     </main>
   )
