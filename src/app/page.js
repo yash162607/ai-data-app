@@ -135,7 +135,7 @@ export default function Home() {
           
           {deleteConfirm !== selectedProject.id && (
             <button onClick={function() { handleDeleteClick(selectedProject.id) }} className="bg-red-500 text-white px-6 py-3 rounded-lg font-semibold mb-4 ml-4">
-              🗑️ Delete
+              🗑️ Delete 
             </button>
           )}
           
