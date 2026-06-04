@@ -1,135 +1,90 @@
-'use client'
-
+import UploadSection from '../../components/UploadSection'
+import Navbar from '../../components/Navbar'
+import Footer from '../../components/Footer'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '../../context/auth'
-import Navbar from '../../components/Navbar'
-import Footer from '../../components/Footer'
-import UploadSection from '../../components/UploadSection'
 
 export default function DashboardPage() {
   const router = useRouter()
   const { user, logout } = useAuth()
-  const [isProcessing, setIsProcessing] = useState(false)
-  const [showResults, setShowResults] = useState(false)
-  const [currentData, setCurrentData] = useState(null)
+  const [processing, setProcessing] = useState(false)
+  const [results, setResults] = useState(false)
+  const [data, setData] = useState(null)
 
-  useEffect(function() {
+  useEffect(() => {
     if (!user) router.push('/auth')
-  }, [user, router])
+  }, [user])
 
-  function handleProcessData(file, projectName) {
-    setIsProcessing(true)
-    var reader = new FileReader()
+  function processFile(file, name) {
+    setProcessing(true)
+    const reader = new FileReader()
     reader.onload = function(e) {
-      var text = (e.target.result || '').replace(/^\uFEFF/, '')
-      if (!text) { setIsProcessing(false); alert('Empty'); return }
+      const text = e.target.result.replace(/^\uFEFF/, '')
+      if (!text) { setProcessing(false); alert('Empty!'); return }
       
-      var currency = text.indexOf('₹') > -1 ? '₹' : '$'
-      var lines = text.split('\n')
-      var items = []
-      
-      for (var i = 0; i < lines.length; i++) {
-        var parts = (lines[i] || '').trim().split(/[\t,;]+/)
-        if (parts.length < 2) continue
-        for (var j = 0; j < parts.length; j++) {
-          var num = (parts[j] || '').replace(/[^0-9.]/g, '')
-          if (num && num !== '.') {
-            var amt = parseFloat(num)
-            if (amt > 0 && amt < 100000) {
-              items.push({ id: items.length + 1, name: parts[0] || 'Item', category: parts[1] || 'General', amount: amt })
-              break
-            }
+      const currency = text.includes('₹') ? '₹' : '$'
+      const items = []
+      text.split('\n').forEach(line => {
+        const parts = line.trim().split(/[\t,;]+/)
+        if (parts.length >= 2) {
+          const num = parts[parts.length - 1].replace(/[^0-9.]/g, '')
+          const amt = parseFloat(num)
+          if (amt > 0) {
+            items.push({ id: items.length + 1, name: parts[0], category: parts[1] || 'General', amount: amt })
           }
         }
-      }
+      })
+
+      if (items.length === 0) { setProcessing(false); alert('No data!'); return }
       
-      if (items.length === 0) { setIsProcessing(false); alert('No data'); return }
+      const total = items.reduce((s, i) => s + i.amount, 0)
+      const catTotals = {}
+      items.forEach(i => { catTotals[i.category] = (catTotals[i.category] || 0) + i.amount })
+      const topCat = Object.keys(catTotals).reduce((a, b) => catTotals[a] > catTotals[b] ? a : b, 'General')
       
-      var total = 0
-      for (var k = 0; k < items.length; k++) total += items[k].amount
-      
-      var catObj = {}
-      for (var c = 0; c < items.length; c++) {
-        var cat = items[c].category
-        catObj[cat] = (catObj[cat] || 0) + items[c].amount
-      }
-      
-      var topCat = 'General'
-      var maxV = 0
-      Object.keys(catObj).forEach(function(k) { if (catObj[k] > maxV) { maxV = catObj[k]; topCat = k } })
-      
-      setCurrentData({ name: projectName, items: items, total: total, topCategory: topCat, avg: total / items.length, currency: currency })
-      setIsProcessing(false)
-      setShowResults(true)
+      setData({ name, items, total, topCategory: topCat, avg: total / items.length, currency })
+      setProcessing(false)
+      setResults(true)
     }
-    reader.readAsText(file)
+    reader.readAsText(file, 'UTF-8')
   }
 
   if (!user) return null
 
-  if (showResults && currentData) {
-    var keys = Object.keys(currentData.items.reduce(function(o, i) { o[i.category] = (o[i.category] || 0) + i.amount; return o }, {}))
-    var maxV = Math.max.apply(null, keys.map(function(k) { return currentData.items.filter(function(i) { return i.category === k }).reduce(function(s, i) { return s + i.amount }, 0) }))
-
+  if (results && data) {
     return (
-      <main className="min-h-screen bg-slate-900 text-white">
+      <div className="min-h-screen bg-slate-900">
         <Navbar />
-        <div className="p-8">
-          <div className="flex gap-4 mb-8 justify-center">
-            <button onClick={function() { router.push('/') }} className="px-6 py-3 bg-gray-700 rounded">Home</button>
-            <button onClick={function() { setShowResults(false); setCurrentData(null) }} className="px-6 py-3 bg-blue-600 rounded">New</button>
+        <div className="p-8 text-white">
+          <div className="flex gap-4 mb-8">
+            <button onClick={() => router.push('/')} className="bg-gray-700 px-4 py-2 rounded">Home</button>
+            <button onClick={() => { setResults(false); setData(null) }} className="bg-blue-600 px-4 py-2 rounded">New</button>
           </div>
-          
-          <h1 className="text-4xl text-center mb-8">{currentData.name}</h1>
-          
-          <div className="grid grid-cols-4 gap-4 mb-8">
-            <div className="bg-blue-600 p-6 rounded text-center"><p className="text-3xl">{currentData.currency}{currentData.total}</p><p>Total</p></div>
-            <div className="bg-red-600 p-6 rounded text-center"><p className="text-3xl">{currentData.topCategory}</p><p>Top</p></div>
-            <div className="bg-green-600 p-6 rounded text-center"><p className="text-3xl">{currentData.currency}{currentData.avg.toFixed(0)}</p><p>Avg</p></div>
-            <div className="bg-purple-600 p-6 rounded text-center"><p className="text-3xl">{currentData.items.length}</p><p>Items</p></div>
+          <h1 className="text-3xl text-center mb-6">{data.name}</h1>
+          <div className="grid grid-cols-4 gap-4 mb-6">
+            <div className="bg-blue-600 p-4 rounded text-center"><div className="text-2xl">{data.currency}{data.total}</div><div>Total</div></div>
+            <div className="bg-red-600 p-4 rounded text-center"><div className="text-2xl">{data.topCategory}</div><div>Top</div></div>
+            <div className="bg-green-600 p-4 rounded text-center"><div className="text-2xl">{data.currency}{data.avg.toFixed(0)}</div><div>Avg</div></div>
+            <div className="bg-purple-600 p-4 rounded text-center"><div className="text-2xl">{data.items.length}</div><div>Items</div></div>
           </div>
-          
-          <div className="grid grid-cols-2 gap-4 mb-8">
-            <div className="bg-slate-800 p-6 rounded">
-              <h3 className="text-xl mb-4 text-center">Pie</h3>
-              <div className="flex flex-wrap justify-center gap-2">
-                {keys.map(function(k, i) {
-                  var v = currentData.items.filter(function(it) { return it.category === k }).reduce(function(s, it) { return s + it.amount }, 0)
-                  var p = (v / currentData.total) * 100
-                  return <div key={k} className="text-center p-2"><div className={'rounded-full bg-' + ['blue', 'green', 'purple', 'orange', 'red'][i % 5] + '-500 inline-flex items-center justify-center text-white font-bold'} style={{width: (50 + p) + 'px', height: (50 + p) + 'px'}}>{p.toFixed(0)}%</div><p>{k}</p></div>
-                })}
-              </div>
-            </div>
-            <div className="bg-slate-800 p-6 rounded">
-              <h3 className="text-xl mb-4 text-center">Bar</h3>
-              {keys.map(function(k, i) {
-                var v = currentData.items.filter(function(it) { return it.category === k }).reduce(function(s, it) { return s + it.amount }, 0)
-                var p = (v / maxV) * 100
-                return <div key={k} className="mb-2"><div className="flex justify-between"><span>{k}</span><span>{currentData.currency}{v}</span></div><div className="h-4 bg-slate-700 rounded"><div className={'h-4 bg-' + ['blue', 'green', 'purple', 'orange', 'red'][i % 5] + '-500 rounded'} style={{width: p + '%'}}></div></div></div>
-              })}
-            </div>
-          </div>
-          
           <table className="w-full bg-slate-800">
-            <thead className="bg-slate-700"><tr><th>#</th><th>Item</th><th>Category</th><th>Amount</th></tr></thead>
-            <tbody>
-              {currentData.items.map(function(item, i) { return <tr key={item.id}><td>{i + 1}</td><td>{item.name}</td><td>{item.category}</td><td>{currentData.currency}{item.amount}</td></tr> })}
-            </tbody>
+            <thead className="bg-slate-700"><tr><th className="p-2">#</th><th className="p-2">Item</th><th className="p-2">Category</th><th className="p-2">Amount</th></tr></thead>
+            <tbody>{data.items.map((item, i) => <tr key={item.id} className="border-t border-slate-700"><td className="p-2">{i + 1}</td><td className="p-2">{item.name}</td><td className="p-2">{item.category}</td><td className="p-2">{data.currency}{item.amount}</td></tr>)}</tbody>
           </table>
         </div>
         <Footer />
-      </main>
+      </div>
     )
   }
 
   return (
-    <main className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-gray-50">
       <Navbar />
-      <div className="p-4 flex justify-between"><span>{user.name}</span><button onClick={logout}>Logout</button></div>
-      <UploadSection onProcessData={handleProcessData} isProcessing={isProcessing} />
-      <div className="p-8 text-center"><button onClick={function() { router.push('/') }} className="bg-gray-300 px-6 py-3 rounded">Home</button></div>
+      <div className="p-4 flex justify-between bg-white shadow"><span>{user.name}</span><button onClick={logout}>Logout</button></div>
+      <UploadSection onProcessData={processFile} isProcessing={processing} />
+      <div className="p-8 text-center"><button onClick={() => router.push('/')} className="bg-gray-200 px-6 py-3 rounded">Home</button></div>
       <Footer />
-    </main>
+    </div>
   )
 }
