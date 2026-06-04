@@ -9,323 +9,114 @@ import UploadSection from '../../components/UploadSection'
 
 export default function DashboardPage() {
   const router = useRouter()
-  const { user, logout, saveProject } = useAuth()
-  
+  const { user, logout } = useAuth()
   const [isProcessing, setIsProcessing] = useState(false)
   const [showResults, setShowResults] = useState(false)
   const [currentData, setCurrentData] = useState(null)
 
   useEffect(function() {
-    if (!user) {
-      router.push('/auth')
-    }
+    if (!user) router.push('/auth')
   }, [user, router])
 
   function handleProcessData(file, projectName) {
     setIsProcessing(true)
-    
     var reader = new FileReader()
     reader.onload = function(e) {
-      try {
-        var text = e.target.result
-        if (!text) {
-          alert('File is empty!')
-          setIsProcessing(false)
-          return
-        }
-        
-        text = text.replace(/^\uFEFF/, '')
-        
-        var currency = '$'
-        if (text.indexOf('₹') > -1) {
-          currency = '₹'
-        }
-        
-        var lines = text.split('\n')
-        var items = []
-        
-        for (var i = 0; i < lines.length; i++) {
-          var line = lines[i].trim()
-          if (!line) continue
-          
-          var parts = line.split(/[\t,;]+/)
-          if (parts.length < 2) continue
-          
-          var amount = 0
-          var name = 'Item'
-          var category = 'General'
-          
-          for (var j = 0; j < parts.length; j++) {
-            var val = parts[j].trim()
-            var num = val.replace(/[^0-9.]/g, '')
-            if (num && num !== '.') {
-              var parsed = parseFloat(num)
-              if (parsed > 0 && parsed < 10000000) {
-                amount = parsed
-                if (j === 0) name = parts[0].trim()
-                if (j === 1) category = parts[1].trim()
-              }
+      var text = (e.target.result || '').replace(/^\uFEFF/, '')
+      if (!text) { setIsProcessing(false); alert('Empty'); return }
+      
+      var currency = text.indexOf('₹') > -1 ? '₹' : '$'
+      var lines = text.split('\n')
+      var items = []
+      
+      for (var i = 0; i < lines.length; i++) {
+        var parts = (lines[i] || '').trim().split(/[\t,;]+/)
+        if (parts.length < 2) continue
+        for (var j = 0; j < parts.length; j++) {
+          var num = (parts[j] || '').replace(/[^0-9.]/g, '')
+          if (num && num !== '.') {
+            var amt = parseFloat(num)
+            if (amt > 0 && amt < 100000) {
+              items.push({ id: items.length + 1, name: parts[0] || 'Item', category: parts[1] || 'General', amount: amt })
+              break
             }
           }
-          
-          if (amount > 0) {
-            items.push({
-              id: items.length + 1,
-              name: name,
-              amount: amount,
-              category: category,
-              date: '2024-01-01'
-            })
-          }
         }
-        
-        if (items.length === 0) {
-          alert('No valid data found!')
-          setIsProcessing(false)
-          return
-        }
-        
-        var total = 0
-        for (var k = 0; k < items.length; k++) {
-          total = total + items[k].amount
-        }
-        
-        var categories = {}
-        for (var m = 0; m < items.length; m++) {
-          var cat = items[m].category
-          if (!categories[cat]) categories[cat] = 0
-          categories[cat] = categories[cat] + items[m].amount
-        }
-        
-        var topCategory = 'General'
-        var maxVal = 0
-        var catKeys = Object.keys(categories)
-        for (var n = 0; n < catKeys.length; n++) {
-          if (categories[catKeys[n]] > maxVal) {
-            maxVal = categories[catKeys[n]]
-            topCategory = catKeys[n]
-          }
-        }
-        
-        var avgPerItem = items.length > 0 ? total / items.length : 0
-        
-        var data = {
-          name: projectName,
-          items: items,
-          insights: {
-            total: total,
-            topCategory: topCategory,
-            avgPerItem: avgPerItem,
-            highestExpense: maxVal,
-            categoryCount: catKeys.length,
-            totalItems: items.length
-          },
-          currency: currency
-        }
-        
-        setCurrentData(data)
-        saveProject(data)
-        setIsProcessing(false)
-        setShowResults(true)
-      } catch (err) {
-        alert('Error: ' + err.message)
-        setIsProcessing(false)
       }
-    }
-    
-    reader.onerror = function() {
-      alert('Cannot read file!')
+      
+      if (items.length === 0) { setIsProcessing(false); alert('No data'); return }
+      
+      var total = 0
+      for (var k = 0; k < items.length; k++) total += items[k].amount
+      
+      var catObj = {}
+      for (var c = 0; c < items.length; c++) {
+        var cat = items[c].category
+        catObj[cat] = (catObj[cat] || 0) + items[c].amount
+      }
+      
+      var topCat = 'General'
+      var maxV = 0
+      Object.keys(catObj).forEach(function(k) { if (catObj[k] > maxV) { maxV = catObj[k]; topCat = k } })
+      
+      setCurrentData({ name: projectName, items: items, total: total, topCategory: topCat, avg: total / items.length, currency: currency })
       setIsProcessing(false)
+      setShowResults(true)
     }
-    
-    reader.readAsText(file, 'UTF-8')
+    reader.readAsText(file)
   }
 
-  function handleGoHome() {
-    router.push('/')
-  }
-
-  function handleNewAnalysis() {
-    setShowResults(false)
-    setCurrentData(null)
-  }
-
-  if (!user) {
-    return null
-  }
+  if (!user) return null
 
   if (showResults && currentData) {
-    var chartData = {}
-    for (var c = 0; c < currentData.items.length; c++) {
-      var cat = currentData.items[c].category
-      if (!chartData[cat]) chartData[cat] = 0
-      chartData[cat] = chartData[cat] + currentData.items[c].amount
-    }
-    
-    var chartKeys = Object.keys(chartData)
-    var totalAmount = currentData.insights.total
-    var maxValue = 0
-    for (var mv = 0; mv < chartKeys.length; mv++) {
-      if (chartData[chartKeys[mv]] > maxValue) maxValue = chartData[chartKeys[mv]]
-    }
-    
-    var pieColors = ['bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-orange-500', 'bg-red-500']
-    var barColors = ['from-blue-500', 'from-green-500', 'from-purple-500', 'from-orange-500', 'from-red-500']
+    var keys = Object.keys(currentData.items.reduce(function(o, i) { o[i.category] = (o[i.category] || 0) + i.amount; return o }, {}))
+    var maxV = Math.max.apply(null, keys.map(function(k) { return currentData.items.filter(function(i) { return i.category === k }).reduce(function(s, i) { return s + i.amount }, 0) }))
 
     return (
-      <main className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+      <main className="min-h-screen bg-slate-900 text-white">
         <Navbar />
-        <div className="bg-white/10 backdrop-blur-md border-b border-white/20 py-4">
-          <div className="max-w-7xl mx-auto px-4 flex justify-between items-center">
-            <span className="text-white font-semibold">Welcome, {user.name}</span>
-            <button onClick={logout} className="text-white/70 hover:text-white">Logout</button>
-          </div>
-        </div>
-        
-        <div className="max-w-6xl mx-auto px-4 pt-8 flex flex-wrap gap-3 justify-center">
-          <button onClick={handleGoHome} className="px-6 py-3 rounded-xl bg-gray-700 text-white">Home</button>
-          <button onClick={handleNewAnalysis} className="px-6 py-3 rounded-xl bg-blue-500 text-white">New Analysis</button>
-        </div>
-        
-        <div className="max-w-6xl mx-auto px-4 py-8">
-          <h2 className="text-4xl font-bold text-white text-center mb-2">{currentData.name}</h2>
-          
-          <div className="bg-white/10 backdrop-blur-xl rounded-3xl p-8 mb-8 border border-white/20">
-            <h3 className="text-2xl font-bold text-white mb-6 text-center">Summary</h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="bg-blue-600 p-6 rounded-2xl text-center">
-                <p className="text-3xl font-bold text-white">{currentData.currency}{currentData.insights.total}</p>
-                <p className="text-blue-200">Total</p>
-              </div>
-              <div className="bg-red-600 p-6 rounded-2xl text-center">
-                <p className="text-3xl font-bold text-white">{currentData.insights.topCategory}</p>
-                <p className="text-red-200">Biggest</p>
-              </div>
-              <div className="bg-green-600 p-6 rounded-2xl text-center">
-                <p className="text-3xl font-bold text-white">{currentData.currency}{currentData.insights.avgPerItem.toFixed(0)}</p>
-                <p className="text-green-200">Average</p>
-              </div>
-              <div className="bg-purple-600 p-6 rounded-2xl text-center">
-                <p className="text-3xl font-bold text-white">{currentData.insights.totalItems}</p>
-                <p className="text-purple-200">Items</p>
-              </div>
-            </div>
+        <div className="p-8">
+          <div className="flex gap-4 mb-8 justify-center">
+            <button onClick={function() { router.push('/') }} className="px-6 py-3 bg-gray-700 rounded">Home</button>
+            <button onClick={function() { setShowResults(false); setCurrentData(null) }} className="px-6 py-3 bg-blue-600 rounded">New</button>
           </div>
           
-          <div className="grid md:grid-cols-2 gap-8 mb-8">
-            <div className="bg-white/10 backdrop-blur-xl rounded-3xl p-8 border border-white/20">
-              <h3 className="text-xl font-bold text-white mb-6 text-center">Pie Chart</h3>
-              <div className="flex flex-wrap justify-center gap-4">
-                {chartKeys.map(function(key, index) {
-                  var value = chartData[key]
-                  var percent = totalAmount > 0 ? (value / totalAmount) * 100 : 0
-                  var color = pieColors[index % pieColors.length]
-                  var size = Math.max(70, Math.min(140, percent + 20))
-                  return (
-                    <div key={key} className="text-center">
-                      <div className={color + ' rounded-full flex items-center justify-center text-white font-bold'} style={{width: size + 'px', height: size + 'px'}}>
-                        {percent.toFixed(0)}%
-                      </div>
-                      <p className="mt-2 text-white">{key}</p>
-                      <p className="text-purple-300">{currentData.currency}{value}</p>
-                    </div>
-                  )
+          <h1 className="text-4xl text-center mb-8">{currentData.name}</h1>
+          
+          <div className="grid grid-cols-4 gap-4 mb-8">
+            <div className="bg-blue-600 p-6 rounded text-center"><p className="text-3xl">{currentData.currency}{currentData.total}</p><p>Total</p></div>
+            <div className="bg-red-600 p-6 rounded text-center"><p className="text-3xl">{currentData.topCategory}</p><p>Top</p></div>
+            <div className="bg-green-600 p-6 rounded text-center"><p className="text-3xl">{currentData.currency}{currentData.avg.toFixed(0)}</p><p>Avg</p></div>
+            <div className="bg-purple-600 p-6 rounded text-center"><p className="text-3xl">{currentData.items.length}</p><p>Items</p></div>
+          </div>
+          
+          <div className="grid grid-cols-2 gap-4 mb-8">
+            <div className="bg-slate-800 p-6 rounded">
+              <h3 className="text-xl mb-4 text-center">Pie</h3>
+              <div className="flex flex-wrap justify-center gap-2">
+                {keys.map(function(k, i) {
+                  var v = currentData.items.filter(function(it) { return it.category === k }).reduce(function(s, it) { return s + it.amount }, 0)
+                  var p = (v / currentData.total) * 100
+                  return <div key={k} className="text-center p-2"><div className={'rounded-full bg-' + ['blue', 'green', 'purple', 'orange', 'red'][i % 5] + '-500 inline-flex items-center justify-center text-white font-bold'} style={{width: (50 + p) + 'px', height: (50 + p) + 'px'}}>{p.toFixed(0)}%</div><p>{k}</p></div>
                 })}
               </div>
             </div>
-            
-            <div className="bg-white/10 backdrop-blur-xl rounded-3xl p-8 border border-white/20">
-              <h3 className="text-xl font-bold text-white mb-6 text-center">Bar Chart</h3>
-              <div className="space-y-4">
-                {chartKeys.map(function(key, index) {
-                  var value = chartData[key]
-                  var percent = maxValue > 0 ? (value / maxValue) * 100 : 0
-                  var color = barColors[index % barColors.length]
-                  return (
-                    <div key={key}>
-                      <div className="flex justify-between mb-1">
-                        <span className="text-white">{key}</span>
-                        <span className="text-purple-300">{currentData.currency}{value}</span>
-                      </div>
-                      <div className="w-full bg-white/20 rounded-full h-6">
-                        <div className={'bg-gradient-to-r ' + color + ' h-6 rounded-full'} style={{width: percent + '%'}}></div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
+            <div className="bg-slate-800 p-6 rounded">
+              <h3 className="text-xl mb-4 text-center">Bar</h3>
+              {keys.map(function(k, i) {
+                var v = currentData.items.filter(function(it) { return it.category === k }).reduce(function(s, it) { return s + it.amount }, 0)
+                var p = (v / maxV) * 100
+                return <div key={k} className="mb-2"><div className="flex justify-between"><span>{k}</span><span>{currentData.currency}{v}</span></div><div className="h-4 bg-slate-700 rounded"><div className={'h-4 bg-' + ['blue', 'green', 'purple', 'orange', 'red'][i % 5] + '-500 rounded'} style={{width: p + '%'}}></div></div></div>
+              })}
             </div>
           </div>
           
-          <div className="grid md:grid-cols-2 gap-8 mb-8">
-            <div className="bg-green-500/20 backdrop-blur-xl rounded-3xl p-8 border border-green-500/30">
-              <h3 className="text-xl font-bold text-green-400 mb-4 text-center">What to Do</h3>
-              <ul className="text-white space-y-2">
-                <li>Track daily expenses</li>
-                <li>Set monthly budget</li>
-                <li>Save 20% income</li>
-              </ul>
-            </div>
-            <div className="bg-red-500/20 backdrop-blur-xl rounded-3xl p-8 border border-red-500/30">
-              <h3 className="text-xl font-bold text-red-400 mb-4 text-center">What Not to Do</h3>
-              <ul className="text-white space-y-2">
-                <li>Overspend on {currentData.insights.topCategory}</li>
-                <li>Ignore expenses</li>
-              </ul>
-            </div>
-          </div>
-          
-          <div className="bg-white/10 backdrop-blur-xl rounded-3xl p-8 mb-8 border border-white/20">
-            <h3 className="text-2xl font-bold text-white mb-6 text-center">Action Plan</h3>
-            <div className="grid md:grid-cols-3 gap-4">
-              <div className="bg-blue-500/30 p-4 rounded-xl">
-                <h4 className="font-bold text-blue-400 mb-2 text-center">This Week</h4>
-                <p className="text-white text-sm">Track daily</p>
-              </div>
-              <div className="bg-purple-500/30 p-4 rounded-xl">
-                <h4 className="font-bold text-purple-400 mb-2 text-center">This Month</h4>
-                <p className="text-white text-sm">Stay under budget</p>
-              </div>
-              <div className="bg-green-500/30 p-4 rounded-xl">
-                <h4 className="font-bold text-green-400 mb-2 text-center">This Quarter</h4>
-                <p className="text-white text-sm">Save more</p>
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-white/10 backdrop-blur-xl rounded-3xl p-8 mb-8 border border-white/20">
-            <h3 className="text-2xl font-bold text-white mb-4 text-center">Recommendation</h3>
-            <div className="text-white space-y-2">
-              <p>Total: {currentData.currency}{currentData.insights.total}</p>
-              <p>Biggest: {currentData.insights.topCategory}</p>
-            </div>
-          </div>
-          
-          <div className="bg-white/10 backdrop-blur-xl rounded-3xl p-8 border border-white/20">
-            <h3 className="text-2xl font-bold text-white mb-4 text-center">All Transactions</h3>
-            <table className="w-full">
-              <thead className="bg-white/20 text-white">
-                <tr>
-                  <th className="p-3 text-center">#</th>
-                  <th className="p-3 text-left">Item</th>
-                  <th className="p-3 text-left">Category</th>
-                  <th className="p-3 text-right">Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {currentData.items.map(function(item, index) {
-                  return (
-                    <tr key={item.id} className="border-b border-white/10">
-                      <td className="p-3 text-white text-center">{index + 1}</td>
-                      <td className="p-3 text-white">{item.name}</td>
-                      <td className="p-3 text-white">{item.category}</td>
-                      <td className="p-3 text-white text-right">{currentData.currency}{item.amount}</td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+          <table className="w-full bg-slate-800">
+            <thead className="bg-slate-700"><tr><th>#</th><th>Item</th><th>Category</th><th>Amount</th></tr></thead>
+            <tbody>
+              {currentData.items.map(function(item, i) { return <tr key={item.id}><td>{i + 1}</td><td>{item.name}</td><td>{item.category}</td><td>{currentData.currency}{item.amount}</td></tr> })}
+            </tbody>
+          </table>
         </div>
         <Footer />
       </main>
@@ -333,21 +124,11 @@ export default function DashboardPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
+    <main className="min-h-screen bg-gray-100">
       <Navbar />
-      <div className="bg-white shadow-sm py-3">
-        <div className="max-w-7xl mx-auto px-4 flex justify-between items-center">
-          <span className="font-medium">Welcome, {user.name}</span>
-          <button onClick={logout} className="text-gray-600">Logout</button>
-        </div>
-      </div>
-      
+      <div className="p-4 flex justify-between"><span>{user.name}</span><button onClick={logout}>Logout</button></div>
       <UploadSection onProcessData={handleProcessData} isProcessing={isProcessing} />
-      
-      <div className="text-center py-8">
-        <button onClick={handleGoHome} className="bg-gray-200 px-6 py-3 rounded-lg">Back to Home</button>
-      </div>
-      
+      <div className="p-8 text-center"><button onClick={function() { router.push('/') }} className="bg-gray-300 px-6 py-3 rounded">Home</button></div>
       <Footer />
     </main>
   )
