@@ -8,13 +8,12 @@ import Footer from '../components/Footer'
 
 export default function Home() {
   const router = useRouter()
-  const { user, getUserProjects, logout, refresh, isLoaded } = useAuth()
+  const { user, getUserProjects, logout, deleteProject, refresh, isLoaded } = useAuth()
   
   const [showFullAnalysis, setShowFullAnalysis] = useState(false)
   const [selectedProject, setSelectedProject] = useState(null)
   const [projects, setProjects] = useState([])
   const [deleteConfirm, setDeleteConfirm] = useState(null)
-  const [shareSuccess, setShareSuccess] = useState('')
 
   useEffect(function() {
     if (isLoaded && user) {
@@ -23,26 +22,19 @@ export default function Home() {
   }, [user, isLoaded])
 
   useEffect(function() {
-    function handleFocus() {
-      refresh()
-      if (user) {
+    if (user) {
+      const interval = setInterval(function() {
         setProjects(getUserProjects())
-      }
-    }
-    window.addEventListener('focus', handleFocus)
-    return function() {
-      window.removeEventListener('focus', handleFocus)
+      }, 5000)
+      return function() { clearInterval(interval) }
     }
   }, [user])
 
   const hasProjects = projects && projects.length > 0
 
   function handleStart() {
-    if (user) {
-      router.push('/dashboard')
-    } else {
-      router.push('/auth')
-    }
+    if (user) router.push('/dashboard')
+    else router.push('/auth')
   }
 
   function handleLogout() {
@@ -66,11 +58,9 @@ export default function Home() {
   }
 
   function confirmDelete(projectId) {
-    const { deleteProject } = useAuth ? require('../context/auth').useAuth() : { deleteProject: () => {} }
     deleteProject(projectId)
     setDeleteConfirm(null)
     setProjects(getUserProjects())
-    
     if (selectedProject && selectedProject.id === projectId) {
       setShowFullAnalysis(false)
       setSelectedProject(null)
@@ -86,36 +76,42 @@ export default function Home() {
       a: Math.round(project.insights.avgPerItem),
       cnt: project.items.length
     }
-    
-    const encoded = btoa(JSON.stringify(minData))
-    return window.location.origin + '/s/' + encoded.replace(/=/g, '')
+    return window.location.origin + '/s/' + btoa(JSON.stringify(minData)).replace(/=/g, '')
   }
 
-  function handleCopyLink(project) {
-    navigator.clipboard.writeText(createShareLink(project))
-    setShareSuccess('Link copied!')
-    setTimeout(function() { setShareSuccess('') }, 2000)
-  }
-
-  function handleRefresh() {
-    refresh()
-    setProjects(getUserProjects())
+  function handleCopyLink() {
+    if (selectedProject) {
+      navigator.clipboard.writeText(createShareLink(selectedProject))
+      alert('Link copied!')
+    }
   }
 
   function formatDate(isoString) {
-    const date = new Date(isoString)
-    return date.toLocaleDateString()
+    return new Date(isoString).toLocaleDateString()
   }
 
   if (!isLoaded) {
     return (
       <main className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <p>Loading...</p>
+        <p className="text-xl">Loading...</p>
       </main>
     )
   }
 
+  // FULL ANALYSIS VIEW
   if (showFullAnalysis && selectedProject) {
+    // Calculate chart data
+    const chartData = {}
+    selectedProject.items.forEach(function(item) {
+      const cat = item.category
+      if (!chartData[cat]) chartData[cat] = 0
+      chartData[cat] += item.amount
+    })
+    
+    const chartKeys = Object.keys(chartData)
+    const maxVal = Math.max(...Object.values(chartData))
+    const colors = ['bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-orange-500', 'bg-red-500', 'bg-yellow-500', 'bg-pink-500', 'bg-indigo-500']
+
     return (
       <main className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
         <Navbar />
@@ -125,17 +121,13 @@ export default function Home() {
             ← Back to Projects
           </button>
           
-          {shareSuccess && (
-            <span className="bg-green-500 text-white px-4 py-2 rounded-lg ml-4">{shareSuccess}</span>
-          )}
-          
-          <button onClick={function() { handleCopyLink(selectedProject) }} className="bg-blue-500 text-white px-6 py-3 rounded-lg font-semibold mb-4 ml-4">
-            🔗 Share
+          <button onClick={handleCopyLink} className="bg-blue-500 text-white px-6 py-3 rounded-lg font-semibold mb-4 ml-4">
+            🔗 Share Link
           </button>
           
           {deleteConfirm !== selectedProject.id && (
             <button onClick={function() { handleDeleteClick(selectedProject.id) }} className="bg-red-500 text-white px-6 py-3 rounded-lg font-semibold mb-4 ml-4">
-              🗑️ Delete 
+              🗑️ Delete
             </button>
           )}
           
@@ -148,48 +140,94 @@ export default function Home() {
           )}
         </div>
         
-        {/* Project Results */}
+        {/* MAIN ANALYSIS */}
         <div className="max-w-6xl mx-auto px-4 py-8">
-          <h2 className="text-3xl font-bold mb-6">{selectedProject.name}</h2>
+          <h2 className="text-3xl font-bold mb-2">{selectedProject.name}</h2>
+          <p className="text-gray-500 mb-8">Saved on {formatDate(selectedProject.savedAt)}</p>
           
-          <div className="grid grid-cols-4 gap-4 mb-8">
+          {/* 4 CARD OVERVIEW */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
             <div className="bg-blue-500 text-white p-6 rounded-xl text-center">
-              <p className="text-3xl font-bold">{selectedProject.currency}{selectedProject.insights.total}</p>
+              <p className="text-4xl font-bold">{selectedProject.currency}{selectedProject.insights.total}</p>
               <p className="text-sm opacity-80">Total</p>
             </div>
             <div className="bg-green-500 text-white p-6 rounded-xl text-center">
-              <p className="text-3xl font-bold">{selectedProject.insights.topCategory}</p>
-              <p className="text-sm opacity-80">Top</p>
+              <p className="text-4xl font-bold">{selectedProject.insights.topCategory}</p>
+              <p className="text-sm opacity-80">Top Category</p>
             </div>
             <div className="bg-purple-500 text-white p-6 rounded-xl text-center">
-              <p className="text-3xl font-bold">{selectedProject.currency}{selectedProject.insights.avgPerItem.toFixed(0)}</p>
+              <p className="text-4xl font-bold">{selectedProject.currency}{selectedProject.insights.avgPerItem.toFixed(0)}</p>
               <p className="text-sm opacity-80">Average</p>
             </div>
             <div className="bg-orange-500 text-white p-6 rounded-xl text-center">
-              <p className="text-3xl font-bold">{selectedProject.items.length}</p>
+              <p className="text-4xl font-bold">{selectedProject.items.length}</p>
               <p className="text-sm opacity-80">Items</p>
             </div>
           </div>
           
-          <div className="bg-white rounded-2xl p-6 shadow-lg">
-            <h3 className="text-xl font-bold mb-4">All Items</h3>
-            <div className="space-y-2">
-              {selectedProject.items.map(function(item) {
+          {/* CHART */}
+          <div className="bg-white rounded-2xl p-6 shadow-lg mb-8">
+            <h3 className="text-xl font-bold mb-4">📊 Category Breakdown</h3>
+            <div className="space-y-4">
+              {chartKeys.map(function(key) {
+                const value = chartData[key]
+                const percent = maxVal > 0 ? (value / maxVal) * 100 : 0
+                const color = colors[chartKeys.indexOf(key) % colors.length]
                 return (
-                  <div key={item.id} className="flex justify-between p-3 bg-gray-50 rounded-lg">
-                    <span>{item.name}</span>
-                    <span>{item.category}</span>
-                    <span className="font-bold">{selectedProject.currency}{item.amount}</span>
+                  <div key={key}>
+                    <div className="flex justify-between mb-1">
+                      <span className="font-medium">{key}</span>
+                      <span>{selectedProject.currency}{value} ({percent.toFixed(0)}%)</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-6">
+                      <div className={color + ' h-6 rounded-full'} style={{ width: percent + '%' }}></div>
+                    </div>
                   </div>
                 )
               })}
             </div>
           </div>
+          
+          {/* RECOMMENDATION */}
+          <div className="bg-white rounded-2xl p-6 shadow-lg mb-8">
+            <h3 className="text-xl font-bold mb-4">💡 Recommendation</h3>
+            <p className="text-gray-600 text-lg">{selectedProject.insights.recommendation}</p>
+          </div>
+          
+          {/* ALL ITEMS TABLE */}
+          <div className="bg-white rounded-2xl p-6 shadow-lg">
+            <h3 className="text-xl font-bold mb-4">📋 All Transactions</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="text-left p-3">Item</th>
+                    <th className="text-left p-3">Category</th>
+                    <th className="text-right p-3">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedProject.items.map(function(item) {
+                    return (
+                      <tr key={item.id} className="border-t">
+                        <td className="p-3">{item.name}</td>
+                        <td className="p-3"><span className="bg-gray-100 px-2 py-1 rounded">{item.category}</span></td>
+                        <td className="p-3 text-right font-bold">{selectedProject.currency}{item.amount}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
+        
+        <Footer />
       </main>
     )
   }
 
+  // HOME VIEW
   return (
     <main className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
       <Navbar />
@@ -205,6 +243,7 @@ export default function Home() {
         </div>
       )}
       
+      {/* HERO */}
       <section className="flex-1 flex items-center justify-center py-20">
         <div className="max-w-7xl mx-auto px-4 text-center">
           <div className="inline-block px-4 py-2 bg-blue-50 rounded-full mb-8">
@@ -217,7 +256,7 @@ export default function Home() {
           </h1>
           
           <p className="text-xl text-gray-600 max-w-2xl mx-auto mb-10">
-            Upload any file and let our AI transform it into structured data.
+            Upload any file and let our AI transform it into structured data with charts, insights, and recommendations.
           </p>
           
           <button onClick={handleStart} className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white px-10 py-4 rounded-xl font-semibold text-lg">
@@ -226,15 +265,11 @@ export default function Home() {
         </div>
       </section>
       
+      {/* PROJECTS */}
       {user && hasProjects && (
         <section className="py-16 px-4">
           <div className="max-w-4xl mx-auto">
-            <div className="flex justify-between items-center mb-8">
-              <h2 className="text-3xl font-bold">Your Projects</h2>
-              <button onClick={handleRefresh} className="p-2 bg-gray-100 rounded-lg">
-                🔄
-              </button>
-            </div>
+            <h2 className="text-3xl font-bold mb-8 text-center">Your Projects</h2>
             
             <div className="space-y-4">
               {projects.map(function(project) {
@@ -256,7 +291,7 @@ export default function Home() {
                         <p className="text-sm text-gray-500">{formatDate(project.savedAt)}</p>
                       </div>
                       <div className="flex gap-2">
-                        <button onClick={function() { handleViewAnalysis(project) }} className="bg-blue-500 text-white px-4 py-2 rounded-lg text-sm">View</button>
+                        <button onClick={function() { handleViewAnalysis(project) }} className="bg-blue-500 text-white px-4 py-2 rounded-lg text-sm">View Analysis</button>
                         <button onClick={function() { handleDeleteClick(project.id) }} className="p-2 bg-red-100 rounded-lg">🗑️</button>
                       </div>
                     </div>
