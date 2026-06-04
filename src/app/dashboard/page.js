@@ -4,8 +4,8 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '../../context/auth'
 import Navbar from '../../components/Navbar'
-import UploadSection from '../../components/UploadSection'
 import Footer from '../../components/Footer'
+import UploadSection from '../../components/UploadSection'
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -22,7 +22,7 @@ export default function DashboardPage() {
     } else {
       setProjects(getUserProjects())
     }
-  }, [user, router, getUserProjects])
+  }, [user, router])
 
   function handleProcessData(file, projectName) {
     setIsProcessing(true)
@@ -84,7 +84,7 @@ export default function DashboardPage() {
       }
       
       if (items.length === 0) {
-        alert('No valid data found!')
+        alert('No valid data found! Make sure your file has numbers.')
         setIsProcessing(false)
         return
       }
@@ -95,7 +95,7 @@ export default function DashboardPage() {
       items.forEach(function(item) {
         const cat = item.category
         if (!categories[cat]) categories[cat] = 0
-        categories[cat] = categories[cat] + item.amount
+        categories[cat] += item.amount
       })
       
       let topCategory = 'General'
@@ -117,7 +117,7 @@ export default function DashboardPage() {
           topCategory: topCategory,
           avgPerItem: avgPerItem,
           highestExpense: maxVal,
-          recommendation: 'Your biggest expense is ' + topCategory
+          recommendation: 'Your biggest expense is ' + topCategory + '. Consider reducing this category to save money!'
         },
         currency: currency
       }
@@ -136,6 +136,42 @@ export default function DashboardPage() {
     router.push('/')
   }
 
+  function handleDelete() {
+    if (currentData && confirm('Delete "' + currentData.name + '"? This cannot be undone.')) {
+      const { deleteProject } = useAuth()
+      deleteProject(currentData.id)
+      router.push('/')
+    }
+  }
+
+  function handleShare() {
+    if (!currentData) return
+    
+    const minData = {
+      n: currentData.name,
+      t: Math.round(currentData.insights.total),
+      c: currentData.currency,
+      k: currentData.insights.topCategory,
+      a: Math.round(currentData.insights.avgPerItem),
+      cnt: currentData.items.length
+    }
+    const link = window.location.origin + '/s/' + btoa(JSON.stringify(minData)).replace(/=/g, '')
+    
+    const shareText = '📊 ' + currentData.name + '\n💰 Total: ' + currentData.currency + currentData.insights.total + '\n📈 Top: ' + currentData.insights.topCategory + '\nItems: ' + currentData.items.length + '\n\n🔗 ' + link
+    
+    // Show share options
+    const choice = prompt('Share options:\n1. Copy Link\n2. WhatsApp\n3. Telegram\n\nEnter 1, 2, or 3:')
+    
+    if (choice === '1') {
+      navigator.clipboard.writeText(link)
+      alert('Link copied: ' + link)
+    } else if (choice === '2') {
+      window.open('https://wa.me/?text=' + encodeURIComponent(shareText), '_blank')
+    } else if (choice === '3') {
+      window.open('https://t.me/share/url?text=' + encodeURIComponent(shareText), '_blank')
+    }
+  }
+
   function handleNewAnalysis() {
     setShowResults(false)
     setCurrentData(null)
@@ -145,19 +181,19 @@ export default function DashboardPage() {
     return null
   }
 
+  // RESULTS VIEW WITH ALL FEATURES
   if (showResults && currentData) {
+    // Calculate chart data
     const chartData = {}
     currentData.items.forEach(function(item) {
       const cat = item.category
       if (!chartData[cat]) chartData[cat] = 0
-      chartData[cat] = chartData[cat] + item.amount
+      chartData[cat] += item.amount
     })
     
     const chartKeys = Object.keys(chartData)
-    let maxChart = 0
-    chartKeys.forEach(function(key) {
-      if (chartData[key] > maxChart) maxChart = chartData[key]
-    })
+    const maxVal = Math.max(...Object.values(chartData))
+    const colors = ['bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-orange-500', 'bg-red-500', 'bg-yellow-500']
 
     return (
       <main className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
@@ -170,48 +206,51 @@ export default function DashboardPage() {
         </div>
         
         <div className="max-w-6xl mx-auto px-4 pt-8">
-          <button onClick={handleGoHome} className="bg-gray-800 text-white px-6 py-3 rounded-lg mr-4">Back</button>
-          <button onClick={handleNewAnalysis} className="bg-blue-500 text-white px-6 py-3 rounded-lg">New Upload</button>
+          <button onClick={handleGoHome} className="bg-gray-800 text-white px-6 py-3 rounded-lg mr-4">🏠 Home</button>
+          <button onClick={handleNewAnalysis} className="bg-blue-500 text-white px-6 py-3 rounded-lg mr-4">➕ New</button>
+          <button onClick={handleShare} className="bg-green-500 text-white px-6 py-3 rounded-lg mr-4">📤 Share</button>
+          <button onClick={handleDelete} className="bg-red-500 text-white px-6 py-3 rounded-lg">🗑️ Delete</button>
         </div>
         
         <div className="max-w-6xl mx-auto px-4 py-8">
-          <h2 className="text-3xl font-bold mb-6">{currentData.name}</h2>
+          <h2 className="text-3xl font-bold mb-2">{currentData.name}</h2>
           
-          <div className="grid grid-cols-4 gap-4 mb-8">
+          {/* QUICK OVERVIEW - 4 CARDS */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
             <div className="bg-blue-500 text-white p-6 rounded-xl text-center">
-              <p className="text-3xl font-bold">{currentData.currency}{currentData.insights.total}</p>
-              <p className="text-sm opacity-80">Total</p>
+              <p className="text-4xl font-bold">{currentData.currency}{currentData.insights.total}</p>
+              <p className="text-sm opacity-80">💰 Total</p>
             </div>
             <div className="bg-green-500 text-white p-6 rounded-xl text-center">
-              <p className="text-3xl font-bold">{currentData.insights.topCategory}</p>
-              <p className="text-sm opacity-80">Top</p>
+              <p className="text-4xl font-bold">{currentData.insights.topCategory}</p>
+              <p className="text-sm opacity-80">📈 Top Category</p>
             </div>
             <div className="bg-purple-500 text-white p-6 rounded-xl text-center">
-              <p className="text-3xl font-bold">{currentData.currency}{currentData.insights.avgPerItem.toFixed(0)}</p>
-              <p className="text-sm opacity-80">Average</p>
+              <p className="text-4xl font-bold">{currentData.currency}{currentData.insights.avgPerItem.toFixed(0)}</p>
+              <p className="text-sm opacity-80">📊 Average</p>
             </div>
             <div className="bg-orange-500 text-white p-6 rounded-xl text-center">
-              <p className="text-3xl font-bold">{currentData.items.length}</p>
-              <p className="text-sm opacity-80">Items</p>
+              <p className="text-4xl font-bold">{currentData.items.length}</p>
+              <p className="text-sm opacity-80">📝 Items</p>
             </div>
           </div>
           
+          {/* VISUAL CHART */}
           <div className="bg-white rounded-2xl p-6 shadow-lg mb-8">
-            <h3 className="text-xl font-bold mb-4">Category Breakdown</h3>
-            <div className="space-y-3">
+            <h3 className="text-xl font-bold mb-4">📊 Category Breakdown Chart</h3>
+            <div className="space-y-4">
               {chartKeys.map(function(key) {
                 const value = chartData[key]
-                const percent = maxChart > 0 ? (value / maxChart) * 100 : 0
-                const colors = ['bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-orange-500', 'bg-red-500']
+                const percent = maxVal > 0 ? (value / maxVal) * 100 : 0
                 const color = colors[chartKeys.indexOf(key) % colors.length]
                 return (
                   <div key={key}>
                     <div className="flex justify-between mb-1">
                       <span className="font-medium">{key}</span>
-                      <span>{currentData.currency}{value}</span>
+                      <span>{currentData.currency}{value} ({percent.toFixed(0)}%)</span>
                     </div>
-                    <div className="w-full bg-gray-200 rounded-full h-4">
-                      <div className={color + ' h-4 rounded-full'} style={{ width: percent + '%' }}></div>
+                    <div className="w-full bg-gray-200 rounded-full h-6">
+                      <div className={color + ' h-6 rounded-full'} style={{ width: percent + '%' }}></div>
                     </div>
                   </div>
                 )
@@ -219,29 +258,44 @@ export default function DashboardPage() {
             </div>
           </div>
           
+          {/* ADVICE / RECOMMENDATION */}
           <div className="bg-white rounded-2xl p-6 shadow-lg mb-8">
-            <h3 className="text-xl font-bold mb-4">Recommendation</h3>
-            <p className="text-gray-600">{currentData.insights.recommendation}</p>
+            <h3 className="text-xl font-bold mb-4">💡 Advice for You</h3>
+            <p className="text-gray-600 text-lg">{currentData.insights.recommendation}</p>
           </div>
           
+          {/* ACTION PLAN */}
+          <div className="bg-white rounded-2xl p-6 shadow-lg mb-8">
+            <h3 className="text-xl font-bold mb-4">🎯 Action Plan</h3>
+            <ul className="space-y-2 text-gray-600">
+              <li>✅ Track your expenses every month</li>
+              <li>✅ Set a budget limit for {currentData.insights.topCategory}</li>
+              <li>✅ Review your top spending categories</li>
+              <li>✅ Look for ways to reduce {currentData.insights.topCategory} costs</li>
+            </ul>
+          </div>
+          
+          {/* ALL TRANSACTIONS TABLE */}
           <div className="bg-white rounded-2xl p-6 shadow-lg">
-            <h3 className="text-xl font-bold mb-4">All Transactions</h3>
+            <h3 className="text-xl font-bold mb-4">📋 All Transactions Summary</h3>
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead>
-                  <tr className="border-b">
-                    <th className="text-left py-3">Item</th>
-                    <th className="text-left py-3">Category</th>
-                    <th className="text-right py-3">Amount</th>
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="text-left p-3">#</th>
+                    <th className="text-left p-3">Item</th>
+                    <th className="text-left p-3">Category</th>
+                    <th className="text-right p-3">Amount</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {currentData.items.map(function(item) {
+                  {currentData.items.map(function(item, index) {
                     return (
-                      <tr key={item.id} className="border-b">
-                        <td className="py-3">{item.name}</td>
-                        <td className="py-3">{item.category}</td>
-                        <td className="py-3 text-right">{currentData.currency}{item.amount}</td>
+                      <tr key={item.id} className="border-t">
+                        <td className="p-3 text-gray-500">{index + 1}</td>
+                        <td className="p-3">{item.name}</td>
+                        <td className="p-3"><span className="bg-gray-100 px-2 py-1 rounded text-sm">{item.category}</span></td>
+                        <td className="p-3 text-right font-bold">{currentData.currency}{item.amount}</td>
                       </tr>
                     )
                   })}
@@ -256,6 +310,7 @@ export default function DashboardPage() {
     )
   }
 
+  // UPLOAD VIEW
   return (
     <main className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
       <Navbar />
@@ -273,7 +328,7 @@ export default function DashboardPage() {
       
       <div className="text-center py-8">
         <button onClick={handleGoHome} className="bg-gray-200 text-gray-700 px-6 py-3 rounded-lg">
-          Back to Home
+          ← Back to Home
         </button>
       </div>
       
